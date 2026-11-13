@@ -235,7 +235,7 @@ function viewHome() {
       h('div', { class: 'list' }, p.goals.length ? p.goals.map(g => h('div', {},
         h('div', { class: 'row spread' },
           h('button', { class: 'link', onclick: () => { openGoal = g.id; goalData = null; render(); loadGoal(); } }, h('strong', {}, `${g.id}  ${g.title}`)),
-          badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status])),
+          badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]), g.author_kind === 'ai' ? badge(gt('task.author_ai', g.author), 'warn') : null),
         h('div', { class: 'small muted' }, gt('home.goal_stats', g.assignments_used, g.budgets.max_assignments, g.counts.accepted || 0, g.counts.claimed || 0, g.counts.open || 0, g.counts.needs_check || 0, g.summary ? g.summary.slice(0, 90) : '')))) : h('div', { class: 'muted' }, gt('home.no_goals_yet')))));
   }
   out.push(h('button', { onclick: () => textPrompt(gt('home.create_project_title'), gt('home.create_project_label'), v => act(() => api('createProject', { name: v }), gt('home.created')), { area: false, okLabel: gt('common.create') }) }, gt('home.create_project_btn')));
@@ -321,7 +321,7 @@ function viewGoal() {
   return [
     h('div', { class: 'row' }, h('button', { onclick: () => { openGoal = null; render(); } }, gt('goal_view.back'))),
     h('div', { class: 'card' },
-      h('div', { class: 'row spread' }, h('h2', {}, `${g.id}  ${g.title}  `, badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status])),
+      h('div', { class: 'row spread' }, h('h2', {}, `${g.id}  ${g.title}  `, badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]), g.author_kind === 'ai' ? badge(gt('task.author_ai', g.author), 'warn') : null),
         h('div', { class: 'row' },
           g.status === 'active' ? h('button', { onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'paused' }), gt('goal_view.paused_toast')) }, gt('goal_view.pause_btn')) : null,
           ['paused', 'stopped'].includes(g.status) ? h('button', { class: 'primary', onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'active' }), gt('goal_view.resumed_toast')) }, gt('goal_view.resume_btn')) : null,

@@ -46,14 +46,14 @@ export const TOOLS = [
   },
   {
     name: 'plan',
-    description: 'Propose changes to a goal\'s plan; the program validates version, budget and delegation and applies all or nothing. ops: add_task, add_branch, close_branch, add_evidence, update_summary, accept, rework, cancel_task, reassign, ask_human, ask_permission, propose_done, add_goal. When the user gives you new work that fits no existing goal, create one with add_goal instead of waiting: pass goal = the closest existing goal (any status) as template; the new goal inherits its delegation and budgets and can only narrow them (base_version is not needed for add_goal-only calls). To get more delegation (e.g. file writes) use ask_permission, not ask_human: a human approving it changes the goal settings. Give base_version = the goal\'s current plan_version (from any header); if it is stale you get the current board back.',
+    description: 'Propose changes to a goal\'s plan; the program validates version, budget and delegation and applies all or nothing. ops: add_task, add_branch, close_branch, add_evidence, update_summary, accept, rework, cancel_task, reassign, ask_human, ask_permission, propose_done, add_goal. When the user gives you new work that fits no existing goal, create one with add_goal instead of waiting: optionally pass goal = an existing goal (any status) as template; otherwise safe project defaults apply. Delegation and budgets can only be narrowed (base_version is not needed for add_goal-only calls). To get more delegation (e.g. file writes) use ask_permission, not ask_human: a human approving it changes the goal settings. Give base_version = the goal\'s current plan_version (from any header); if it is stale you get the current board back.',
     inputSchema: {
       type: 'object',
       properties: {
         participant: s('Your participant id'), goal: s('Goal id, e.g. G-1'), base_version: n('plan_version your proposal is based on'),
         ops: { type: 'array', description: 'Operations, each {op: "...", ...}. add_task: {title, body, role, mode, tier? (planner|senior|worker|any; default any), branch?, depends_on?, prefer?, exclude?, review?, ref?}. add_branch: {hypothesis, expected, keep_if, reject_if, ref?}. close_branch: {branch, verdict, reason}. add_evidence: {kind, text, source}. update_summary: {current, next_step}. accept/rework: {task, reason}. cancel_task: {task, reason}. reassign: {task, prefer}. ask_human: {question, options}. ask_permission: {keys: [write_files|run_code|install_deps|prototype|research], reason}. propose_done: {evidence}. add_goal: {title, outcome, done_evidence, priorities?, notes?, delegation? (only deny values apply), budgets? (capped at the template)}; must be the only op type in the call. "ref" names a new item so later ops in the same call can point at it.', items: { type: 'object', properties: { op: s('Operation name'), tier: s('Task tier for add_task; defaults to any', { enum: ['planner', 'senior', 'worker', 'any'] }) }, required: ['op'] } }
       },
-      required: ['participant', 'goal', 'ops']
+      required: ['participant', 'ops']
     }
   },
   {
