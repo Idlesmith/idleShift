@@ -209,6 +209,7 @@ window.GUI_I18N.en = {
   'task.commits': 'Commits',
   'task.commits_count': n => `${n}`,
   'task.uncommitted': 'Uncommitted',
+  'task.wt_error': 'Cleanup error',
   'task.uncommitted_count': n => `${n} uncommitted changes`,
   'task.diff_stat': 'Diff Summary',
   'task.merge_title': 'Merge Branch',

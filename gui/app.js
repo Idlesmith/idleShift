@@ -267,7 +267,8 @@ async function showTask(id) {
         h('div', {}, gt('task.base_commit')), h('div', {}, d.worktree.base_commit?.slice(0, 10) || '—'),
         h('div', {}, gt('task.commits')), h('div', {}, gt('task.commits_count', d.worktree.commit_count)),
         d.worktree.uncommitted_count ? [h('div', {}, gt('task.uncommitted')), h('div', { class: 'bad' }, gt('task.uncommitted_count', d.worktree.uncommitted_count))] : null,
-        d.worktree.diff_stat ? [h('div', {}, gt('task.diff_stat')), h('pre', {}, d.worktree.diff_stat)] : null),
+        d.worktree.diff_stat ? [h('div', {}, gt('task.diff_stat')), h('pre', {}, d.worktree.diff_stat)] : null,
+        d.worktree.last_error ? [h('div', {}, gt('task.wt_error')), h('div', { class: 'bad' }, d.worktree.last_error)] : null),
       d.worktree.state === 'active' ? h('div', { class: 'row' },
         h('button', { class: 'primary', onclick: () => {
           dialog(gt('task.merge_title'),
@@ -275,7 +276,9 @@ async function showTask(id) {
               h('p', {}, gt('task.merge_confirm', d.worktree.branch)),
               d.worktree.diff_stat ? h('pre', {}, d.worktree.diff_stat) : null),
             [h('button', { class: 'primary', onclick: async () => {
-              if (await act(() => api('mergeTaskWorktree', { task: t.id }), gt('task.merged_toast'))) {
+              const r = await act(() => api('mergeTaskWorktree', { task: t.id }), gt('task.merged_toast'));
+              if (r?.warning) toast(r.warning);
+              if (r) {
                 closeDialog();
                 if (openGoal) loadGoal();
               }
@@ -286,7 +289,9 @@ async function showTask(id) {
             h('div', {},
               h('p', {}, gt('task.discard_confirm', d.worktree.branch))),
             [h('button', { class: 'stop', onclick: async () => {
-              if (await act(() => api('discardTaskWorktree', { task: t.id }), gt('task.discarded_toast'))) {
+              const r = await act(() => api('discardTaskWorktree', { task: t.id }), gt('task.discarded_toast'));
+              if (r?.warning) toast(r.warning);
+              if (r) {
                 closeDialog();
                 if (openGoal) loadGoal();
               }

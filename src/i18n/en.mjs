@@ -145,6 +145,7 @@ export default {
   'assignment.ws_rule_1': 'Edit only inside workspace.path; never touch the main folder or other branches.',
   'assignment.ws_rule_2': 'Commit your changes to this branch before calling report(kind="result"). Do not push.',
   'assignment.ws_rule_3': 'Uncommitted changes will not be included when the human merges.',
+  'assignment.ws_detached': 'The main folder was in detached HEAD when this task started; the human will merge into whatever branch is checked out at merge time.',
   'assignment.ws_identity': 'Git identity is not configured. Commit using git -c user.name=IdleShift -c user.email=idleshift@localhost commit.',
   'assignment.ws_dirty': n => `${n} uncommitted human changes are not included in the base commit.`,
   'assignment.ws_uncommitted': n => `${n} uncommitted changes remain from a previous assignee.`,
@@ -203,6 +204,8 @@ export default {
   'human.no_discard_worktree': 'No active worktree to discard.',
   'human.bad_repo': 'Main repository not found or not initialized.',
   'human.repo_dirty': (count, list) => `Main working tree has ${count} uncommitted changes${list}. Please clean the working tree first.`,
+  'human.detached_head': 'The main working tree is in detached HEAD state. Switch to the target branch, then merge again.',
+  'human.cleanup_failed': err => `Merge/discard finished, but removing the worktree or branch failed (leftovers can be removed from the orphan worktree list): ${err}`,
   'human.branch_mismatch': (cur, target) => `Main working tree branch (${cur}) does not match merge target (${target}).`,
   'human.merge_conflict': files => `Cannot merge due to conflicts: ${files}`,
 

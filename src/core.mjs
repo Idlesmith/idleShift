@@ -1338,7 +1338,8 @@ export class Core extends EventEmitter {
       throw new Refusal('repo_dirty', this.tUi('human.repo_dirty', info.dirtyCount, listStr));
     }
 
-    // 2. Check main branch matches targetBranch
+    // 2. Main must be on a branch (not detached HEAD) and match targetBranch
+    if (!info.targetBranch) throw new Refusal('detached_head', this.tUi('human.detached_head'));
     if (wt.target_branch && info.targetBranch !== wt.target_branch) {
       throw new Refusal('branch_mismatch', this.tUi('human.branch_mismatch', info.targetBranch, wt.target_branch));
     }
@@ -1357,11 +1358,12 @@ export class Core extends EventEmitter {
     if (!res.ok) throw new Refusal('merge_failed', res.error);
 
     // 5. Cleanup worktree and branch
-    removeWorktree({ repoRoot: wt.repo_root, worktreePath: wt.path, branch: wt.branch, force: true, deleteBranch: true, forceBranch: false });
-    this.run("UPDATE worktrees SET state='merged', updated_at=? WHERE task_id=?", this.now(), t.id);
-    this.event('worktree_merged', { project: t.project_id, goal: t.goal_id, task: t.id, data: { branch: wt.branch, method: res.method } });
+    const cleanup = removeWorktree({ repoRoot: wt.repo_root, worktreePath: wt.path, branch: wt.branch, force: true, deleteBranch: true, forceBranch: false });
+    const cleanupError = cleanup.ok ? '' : clip(cleanup.error, 500);
+    this.run("UPDATE worktrees SET state='merged', last_error=?, updated_at=? WHERE task_id=?", cleanupError, this.now(), t.id);
+    this.event('worktree_merged', { project: t.project_id, goal: t.goal_id, task: t.id, data: { branch: wt.branch, method: res.method, ...(cleanupError ? { cleanup_error: cleanupError } : {}) } });
     this.kick();
-    return { ok: true, method: res.method };
+    return cleanupError ? { ok: true, method: res.method, cleanup_error: cleanupError, warning: this.tUi('human.cleanup_failed', cleanupError) } : { ok: true, method: res.method };
   }
 
   discardTaskWorktree(taskId) {
@@ -1370,10 +1372,11 @@ export class Core extends EventEmitter {
     if (!wt || wt.state !== 'active') throw new Refusal('bad_state', this.tUi('human.no_discard_worktree'));
 
     const res = removeWorktree({ repoRoot: wt.repo_root, worktreePath: wt.path, branch: wt.branch, force: true, deleteBranch: true, forceBranch: true });
-    this.run("UPDATE worktrees SET state='discarded', updated_at=? WHERE task_id=?", this.now(), t.id);
-    this.event('worktree_discarded', { project: t.project_id, goal: t.goal_id, task: t.id, data: { branch: wt.branch, manual: true } });
+    const cleanupError = res.ok ? '' : clip(res.error, 500);
+    this.run("UPDATE worktrees SET state='discarded', last_error=?, updated_at=? WHERE task_id=?", cleanupError, this.now(), t.id);
+    this.event('worktree_discarded', { project: t.project_id, goal: t.goal_id, task: t.id, data: { branch: wt.branch, manual: true, ...(cleanupError ? { cleanup_error: cleanupError } : {}) } });
     this.kick();
-    return { ok: true };
+    return cleanupError ? { ok: true, cleanup_error: cleanupError, warning: this.tUi('human.cleanup_failed', cleanupError) } : { ok: true };
   }
 
   claim(args = {}, meta = {}) {
@@ -1456,6 +1459,7 @@ export class Core extends EventEmitter {
           this.tAi('assignment.ws_rule_3')
         ];
         if (!hasGitIdentity(wt.path)) rules.push(this.tAi('assignment.ws_identity'));
+        if (!wt.target_branch) rules.push(this.tAi('assignment.ws_detached'));
         if (notice?.dirtyCount > 0) rules.push(this.tAi('assignment.ws_dirty', notice.dirtyCount));
         if (st.uncommittedCount > 0) rules.push(this.tAi('assignment.ws_uncommitted', st.uncommittedCount));
         workspace = {
