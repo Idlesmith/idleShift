@@ -209,6 +209,7 @@ window.GUI_I18N.ja = {
   'task.commits': 'コミット数',
   'task.commits_count': n => `${n} 件`,
   'task.uncommitted': '未コミット',
+  'task.wt_error': '後片付けエラー',
   'task.uncommitted_count': n => `${n} 件の未コミット変更あり`,
   'task.diff_stat': '差分要約',
   'task.merge_title': 'ブランチのマージ（取り込み）',

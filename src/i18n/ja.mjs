@@ -145,6 +145,7 @@ export default {
   'assignment.ws_rule_1': '渡された作業フォルダー（workspace.path）の中だけで編集し、メインのフォルダーや他のブランチには触れない。',
   'assignment.ws_rule_2': '変更はこのブランチにコミットしてから report(kind="result") する。push はしない。',
   'assignment.ws_rule_3': 'コミットされていない変更は、人がマージするときに取り込まれない。',
+  'assignment.ws_detached': 'タスク開始時、メインは detached HEAD でした。マージ時は人がその時点のブランチへ取り込みます。',
   'assignment.ws_identity': 'Git の名前またはメールが未設定です。git -c user.name=IdleShift -c user.email=idleshift@localhost commit でコミットしてください。',
   'assignment.ws_dirty': n => `人の未コミットの変更 ${n} 件は起点に含まれていない`,
   'assignment.ws_uncommitted': n => `前の担当による未コミットの変更が ${n} 件残っています`,
@@ -203,6 +204,8 @@ export default {
   'human.no_discard_worktree': '破棄可能なワークツリーがありません。',
   'human.bad_repo': 'メインリポジトリが見つからないか初期化されていません。',
   'human.repo_dirty': (count, list) => `メインの作業ツリーに未コミットの変更が ${count} 件あります${list}。作業ツリーをきれいにしてください。`,
+  'human.detached_head': 'メイン作業ツリーが detached HEAD（ブランチ外）です。マージ先のブランチに切り替えてから再度マージしてください。',
+  'human.cleanup_failed': err => `マージ/破棄は完了しましたが、作業用フォルダーまたはブランチの削除に失敗しました（残ったものは孤立ワークツリー一覧から削除できます）: ${err}`,
   'human.branch_mismatch': (cur, target) => `メイン作業ツリーの現在のブランチ (${cur}) がマージ先 (${target}) と一致しません。`,
   'human.merge_conflict': files => `競合が発生するためマージできません: ${files}`,
 
