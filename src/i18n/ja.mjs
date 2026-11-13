@@ -137,6 +137,10 @@ export default {
   'next.none_service_limit': 'あなたのサービスは上限到達と報告されています。回復予定時刻までは提示しません。',
   'next.none_open_blocked': 'いまあなたに提示できるタスクはありません（未着手のタスクは、別の担当の優先期間中・依存待ち・同時作業数の上限のいずれかです）。',
   'next.none_empty': 'いま提示できるタスクはありません。',
+  'next.none_human_waits': list => `人の操作待ち: ${list}`,
+  'next.wait_item_merge': id => `${id} のマージ`,
+  'next.wait_item_decision': id => `判断 ${id}`,
+  'next.wait_item_done_candidate': id => `${id} の完了確定`,
   'next.superseded': '同じ参加者の新しい待機に置き換わりました。この応答では何もしないでください。',
 
   'assignment.rule_writes': 'このタスクは 書込みあり(writes) として割り当てられた',

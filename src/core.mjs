@@ -125,7 +125,13 @@ export class Core extends EventEmitter {
   // Notification text never carries project content - only that something waits.
   notify(kind, projectId) {
     const name = projectId ? this.one('SELECT name FROM projects WHERE id=?', projectId)?.name : '';
-    const text = { decision: '判断待ちがあります', needs_check: '応答のない書込みタスクがあります（確認が必要）', resume: '再開が必要なアプリがあります', done: '完了候補の確認待ちです' }[kind] || kind;
+    const text = {
+      decision: '判断待ちがあります',
+      needs_check: '応答のない書込みタスクがあります（確認が必要）',
+      resume: '再開が必要なアプリがあります',
+      done: '完了候補の確認待ちです',
+      human_wait: '人の操作待ちがあります'
+    }[kind] || kind;
     this.emit('notify', { kind, title: 'IdleShift', body: name ? `${text}：${name}` : text });
   }
 
@@ -136,7 +142,7 @@ export class Core extends EventEmitter {
     this.emit('changed');
   }
 
-  settle() { this.tx(() => { this.ensureFacilitators(); }); this.deliver(); }
+  settle() { this.tx(() => { this.ensureFacilitators(); this.checkHumanWaits(); }); this.deliver(); }
 
   // ---------- settings ----------
   getLanguages() {
@@ -1172,19 +1178,77 @@ export class Core extends EventEmitter {
     const limitedUntil = this.quotaView(p.client).blocked_until; // the service's own limit, as reported
     if (hold <= 0) {
       const until = limitedUntil ?? usageLimit?.until;
-      if (usageLimit) return { kind: 'none', reason: this.tAi('next.none_usage_limit', usageLimit.reason), limited_until: new Date(until).toISOString(), header: { participant: p.id, next_tool: 'next' } };
-      return { kind: 'none', reason: limitedUntil ? this.tAi('next.none_service_limit') : this.one("SELECT COUNT(*) c FROM tasks t JOIN goals g ON g.id=t.goal_id WHERE t.project_id=? AND t.state='open' AND g.status='active'", p.project_id).c ? this.tAi('next.none_open_blocked') : this.tAi('next.none_empty'), limited_until: limitedUntil ? new Date(limitedUntil).toISOString() : undefined, header: { participant: p.id, next_tool: 'next' } };
+      const waits = this.humanWaits(p.project_id);
+      const waitsExtra = waits.length ? { waiting_on: waits } : {};
+      if (usageLimit) return { kind: 'none', reason: this.tAi('next.none_usage_limit', usageLimit.reason), ...waitsExtra, limited_until: new Date(until).toISOString(), header: { participant: p.id, next_tool: 'next' } };
+      if (limitedUntil) return { kind: 'none', reason: this.tAi('next.none_service_limit'), ...waitsExtra, limited_until: new Date(limitedUntil).toISOString(), header: { participant: p.id, next_tool: 'next' } };
+      if (waits.length) {
+        return { kind: 'none', reason: this.tAi('next.none_human_waits', this.formatHumanWaits(waits, this.aiLang())), waiting_on: waits, header: { participant: p.id, next_tool: 'next' } };
+      }
+      const openActive = this.one("SELECT COUNT(*) c FROM tasks t JOIN goals g ON g.id=t.goal_id WHERE t.project_id=? AND t.state='open' AND g.status='active'", p.project_id).c;
+      return { kind: 'none', reason: openActive ? this.tAi('next.none_open_blocked') : this.tAi('next.none_empty'), header: { participant: p.id, next_tool: 'next' } };
     }
     return new Promise(resolve => {
       const prev = this.waiters.get(p.id);
       if (prev) this.resolveWaiter(p.id, { kind: 'superseded', note: this.tAi('next.superseded') }, 'superseded');
       const w = { resolve, since: this.now(), hold, conn: meta.conn ?? null, project: p.project_id, client: p.client, limitedAtStart: !!limitedUntil, timer: null };
-      w.timer = setTimeout(() => this.resolveWaiter(p.id, { kind: 'none', again: true, header: { participant: p.id, next_tool: 'next' } }, 'timeout'), hold);
+      w.timer = setTimeout(() => {
+        const waits = this.humanWaits(p.project_id);
+        const res = waits.length
+          ? { kind: 'none', again: true, reason: this.tAi('next.none_human_waits', this.formatHumanWaits(waits, this.aiLang())), waiting_on: waits, header: { participant: p.id, next_tool: 'next' } }
+          : { kind: 'none', again: true, header: { participant: p.id, next_tool: 'next' } };
+        this.resolveWaiter(p.id, res, 'timeout');
+      }, hold);
       w.timer.unref?.();
       this.waiters.set(p.id, w);
       this.emit('changed');
       this.kick();
     });
+  }
+
+  humanWaits(projectId) {
+    const items = [];
+    const seen = new Set();
+    const add = (item, key) => { if (!seen.has(key)) { seen.add(key); items.push(item); } };
+    const unmergedDeps = new Set();
+    for (const t of this.all("SELECT t.id, t.depends FROM tasks t JOIN goals g ON g.id=t.goal_id WHERE t.project_id=? AND t.state='open' AND g.status='active' AND t.mode='writes'", projectId)) {
+      for (const dep of J(t.depends, [])) {
+        const depTask = this.one('SELECT id, state FROM tasks WHERE id=?', dep);
+        if (depTask?.state !== 'accepted') continue;
+        const wt = this.worktreeRow(dep);
+        if (wt && wt.state === 'active') {
+          const ds = diffStats(wt.repo_root, wt.base_commit, wt.branch);
+          if (ds.commitCount > 0 || wt.uncommitted) {
+            unmergedDeps.add(dep);
+            add({ kind: 'merge', task: dep }, `merge:${dep}`);
+          }
+        }
+      }
+    }
+    for (const row of this.all("SELECT w.task_id, w.repo_root, w.base_commit, w.branch, w.uncommitted FROM worktrees w JOIN tasks t ON t.id=w.task_id WHERE w.project_id=? AND w.state='active' AND t.state='accepted' ORDER BY w.created_at", projectId)) {
+      if (unmergedDeps.has(row.task_id)) continue;
+      const ds = diffStats(row.repo_root, row.base_commit, row.branch);
+      if (ds.commitCount > 0 || row.uncommitted) {
+        add({ kind: 'merge', task: row.task_id }, `merge:${row.task_id}`);
+      }
+    }
+    for (const d of this.all("SELECT id, goal_id, task_id FROM decisions WHERE project_id=? AND state='pending' ORDER BY created_at", projectId)) {
+      add({ kind: 'decision', decision: d.id, ...(d.goal_id ? { goal: d.goal_id } : {}), ...(d.task_id ? { task: d.task_id } : {}) }, `decision:${d.id}`);
+    }
+    for (const g of this.all("SELECT id FROM goals WHERE project_id=? AND status='done_candidate' ORDER BY created_at", projectId)) {
+      add({ kind: 'done_candidate', goal: g.id }, `done_candidate:${g.id}`);
+    }
+    return items;
+  }
+
+  formatHumanWaits(waits, lang = this.aiLang()) {
+    const sep = lang === 'ja' ? '、' : ', ';
+    return waits.map(w => {
+      if (w.kind === 'merge') return t(lang, 'next.wait_item_merge', w.task);
+      if (w.kind === 'decision') return t(lang, 'next.wait_item_decision', w.decision);
+      if (w.kind === 'done_candidate') return t(lang, 'next.wait_item_done_candidate', w.goal);
+      return w.kind;
+    }).join(sep);
   }
 
   dropWaiter(pid) { const w = this.waiters.get(pid); if (!w) return null; clearTimeout(w.timer); this.waiters.delete(pid); return w; }
@@ -2106,10 +2170,25 @@ export class Core extends EventEmitter {
         if (b.deadline && b.deadline <= now) this.raiseDecision({ project: g.project_id, goal: g.id, kind: 'deadline', messageKey: 'decision.deadline', messageArgs: [], options: ['extend', 'stop'] });
       }
       this.ensureFacilitators();
+      this.checkHumanWaits();
       if (!this.lastCleanupAt || now - this.lastCleanupAt >= 24 * 3600_000) this.cleanupWorktrees();
     });
     this.deliver();
     this.checkStalled(now);
+  }
+
+  checkHumanWaits() {
+    this.humanWaitNotified ??= new Map();
+    for (const pr of this.all('SELECT id FROM projects WHERE stopped=0 AND archived_at IS NULL')) {
+      const waits = this.humanWaits(pr.id);
+      if (!waits.length) { this.humanWaitNotified.delete(pr.id); continue; }
+      const inFlight = this.one("SELECT COUNT(*) c FROM tasks t JOIN goals g ON g.id=t.goal_id WHERE t.project_id=? AND t.state IN ('offered','claimed','reported') AND g.status IN ('active','waiting_decision','done_candidate')", pr.id).c;
+      if (inFlight > 0 || this.offerableCount(pr.id) > 0) { this.humanWaitNotified.delete(pr.id); continue; }
+      const key = waits.map(w => `${w.kind}:${w.task || w.decision || w.goal}`).sort().join('|');
+      if (this.humanWaitNotified.get(pr.id) === key) continue;
+      this.humanWaitNotified.set(pr.id, key);
+      this.notify('human_wait', pr.id);
+    }
   }
 
   // Work is ready but no app is waiting or active: an MCP server cannot wake a
@@ -2163,6 +2242,7 @@ export class Core extends EventEmitter {
           tasks: this.myTasks(p.id).map(t => ({ id: t.id, state: t.state, title: t.title }))
         })),
         needs_check: this.all("SELECT id, title, assignee, goal_id, updated_at FROM tasks WHERE project_id=? AND state='needs_check'", pr.id),
+        human_waits: this.humanWaits(pr.id),
         worktrees: this.all('SELECT * FROM worktrees WHERE project_id=? ORDER BY created_at DESC', pr.id)
       }); }),
       decisions: this.all("SELECT * FROM decisions WHERE state='pending' ORDER BY created_at").map(d => ({ ...d, question: this.formatDecision(d, this.uiLang()), options: J(d.options, []) })),

@@ -186,6 +186,18 @@ function deleteProjectDialog(p) {
   textPrompt(gt('project.delete_title', p.name), gt('project.delete_label'), v => act(() => api('deleteProject', { project: p.id, confirm: v }), gt('project.deleted')),
     { area: false, okLabel: gt('project.delete_btn'), hint: gt('project.delete_hint') });
 }
+function humanWaitsText(p) {
+  const waits = p.human_waits || [];
+  if (!waits.length) return '';
+  const items = waits.map(w => {
+    if (w.kind === 'merge') return gt('home.wait_merge', w.task);
+    if (w.kind === 'decision') return gt('home.wait_decision', w.decision);
+    if (w.kind === 'done_candidate') return gt('home.wait_done_candidate', w.goal);
+    return w.kind;
+  });
+  return gt('home.human_waits', items.join(S.settings?.effective_ui_language === 'ja' ? '、' : ', '));
+}
+
 function archiveBlockers(p) {
   const b = p.archive_blockers || {}; const why = [];
   if (b.held_tasks) why.push(gt('project.blocker_held', b.held_tasks));
@@ -232,6 +244,7 @@ function viewHome() {
       h('div', { class: 'small muted' }, gt('home.folders_label'), p.roots.length ? p.roots.map(r => r.path_display).join(' / ') : gt('home.unregistered'), ' ', h('button', { class: 'link', onclick: () => addFolder(p.id) }, gt('home.pick_folder')), '  ', h('button', { class: 'link', onclick: () => textPrompt(gt('folder.register_title'), gt('folder.path_example'), v => act(() => api('addRoot', { project: p.id, path: v }), gt('folder.registered')), { area: false, okLabel: gt('common.register') }) }, gt('home.type_folder'))),
       h('div', { class: 'row small' }, gt('home.participants_label'), p.participants.filter(x => !x.revoked).length ? p.participants.filter(x => !x.revoked).map(x => badge(`${x.label}: ${gt('p_state.' + x.state)}`, P_STATE_CLS[x.state])) : h('span', { class: 'muted' }, gt('home.no_participants'))),
       p.participants.some(x => x.state === 'needs_resume') ? h('div', { class: 'hint small' }, gt('home.needs_resume_hint')) : null,
+      p.human_waits?.length ? h('div', { class: 'hint small' }, humanWaitsText(p)) : null,
       h('div', { class: 'list' }, p.goals.length ? p.goals.map(g => h('div', {},
         h('div', { class: 'row spread' },
           h('button', { class: 'link', onclick: () => { openGoal = g.id; goalData = null; render(); loadGoal(); } }, h('strong', {}, `${g.id}  ${g.title}`)),

@@ -137,6 +137,10 @@ export default {
   'next.none_service_limit': 'Your service reported a usage limit. No new tasks will be offered until the reset time.',
   'next.none_open_blocked': 'No task can be offered to you right now (open tasks are in another participant\'s grace period, waiting on dependencies, or at max_parallel).',
   'next.none_empty': 'No tasks available to offer right now.',
+  'next.none_human_waits': list => `Waiting for human action: ${list}.`,
+  'next.wait_item_merge': id => `merge ${id}`,
+  'next.wait_item_decision': id => `decision ${id}`,
+  'next.wait_item_done_candidate': id => `confirm done ${id}`,
   'next.superseded': 'Superseded by a newer wait from the same participant. Do nothing on this response.',
 
   'assignment.rule_writes': 'This task is assigned with write permissions (writes).',
