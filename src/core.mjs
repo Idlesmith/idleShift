@@ -122,16 +122,20 @@ export class Core extends EventEmitter {
       this.now(), f.project ?? null, f.goal ?? null, f.task ?? null, f.branch ?? null, f.participant ?? null, type, JSON.stringify(f.data ?? {}));
   }
 
-  // Notification text never carries project content - only that something waits.
-  notify(kind, projectId) {
+  // Notification text never carries project prose - only that something waits (and IDs for human_wait).
+  notify(kind, projectId, detail = null) {
     const name = projectId ? this.one('SELECT name FROM projects WHERE id=?', projectId)?.name : '';
-    const text = {
+    const lang = this.uiLang();
+    let text = {
       decision: '判断待ちがあります',
       needs_check: '応答のない書込みタスクがあります（確認が必要）',
       resume: '再開が必要なアプリがあります',
       done: '完了候補の確認待ちです',
       human_wait: '人の操作待ちがあります'
     }[kind] || kind;
+    if (kind === 'human_wait' && Array.isArray(detail) && detail.length) {
+      text = t(lang, 'next.none_human_waits', this.formatHumanWaits(detail, lang));
+    }
     this.emit('notify', { kind, title: 'IdleShift', body: name ? `${text}：${name}` : text });
   }
 
@@ -2187,7 +2191,7 @@ export class Core extends EventEmitter {
       const key = waits.map(w => `${w.kind}:${w.task || w.decision || w.goal}`).sort().join('|');
       if (this.humanWaitNotified.get(pr.id) === key) continue;
       this.humanWaitNotified.set(pr.id, key);
-      this.notify('human_wait', pr.id);
+      this.notify('human_wait', pr.id, waits);
     }
   }
 

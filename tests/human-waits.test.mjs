@@ -99,11 +99,13 @@ test('humanWaits: pending decision and done_candidate + notify once per unchange
   const p = joinAs(core, root, 'worker', 'c-1');
   const notifications = [];
   core.on('notify', n => { if (n.kind === 'human_wait') notifications.push(n); });
+  core.setLanguages({ ui_language: 'ja' });
 
-  // Raise a pending budget decision (puts goal in waiting_decision, so 0 offerable tasks remain) -> notifies once
+  // Raise a pending budget decision (puts goal in waiting_decision, so 0 offerable tasks remain) -> notifies once with D-ID
   const decision = core.raiseDecision({ project, goal, kind: 'budget', messageKey: 'decision.budget', messageArgs: [1, 1], options: ['extend', 'stop'] });
   core.settle();
   assert.equal(notifications.length, 1);
+  assert.match(notifications[0].body, new RegExp(`判断 ${decision}`));
 
   // Calling settle/tick again with same waits does NOT re-notify
   core.settle();
@@ -113,11 +115,13 @@ test('humanWaits: pending decision and done_candidate + notify once per unchange
   const waits1 = core.humanWaits(project);
   assert.deepEqual(waits1, [{ kind: 'decision', decision, goal }]);
 
-  // Answer decision to reactivate, then propose_done -> adds done_candidate + done decision, changing waits -> notifies once more
+  // Answer decision to reactivate, then propose_done -> adds done_candidate + done decision, changing waits -> notifies once more with G-ID & D-ID
   core.answerDecision(decision, 'extend');
+  core.setLanguages({ ui_language: 'en' });
   core.plan({ participant: p, goal, base_version: core.goal(goal).plan_version, ops: [{ op: 'propose_done', evidence: 'all done' }] });
   core.settle();
   assert.equal(notifications.length, 2);
+  assert.match(notifications[1].body, new RegExp(`confirm done ${goal}`));
 
   const waits2 = core.humanWaits(project);
   assert.ok(waits2.some(w => w.kind === 'done_candidate' && w.goal === goal));
