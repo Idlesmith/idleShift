@@ -32,6 +32,16 @@ test('i18n: resolveUiLanguage and resolveAiLanguage', () => {
   assert.equal(resolveUiLanguage('en'), 'en');
   assert.equal(resolveUiLanguage('ja'), 'ja');
   assert.equal(['en', 'ja'].includes(resolveUiLanguage('auto')), true);
+  const saved = process.env.IDLESHIFT_UI_LANGUAGE;
+  try {
+    process.env.IDLESHIFT_UI_LANGUAGE = 'en';
+    assert.equal(resolveUiLanguage('auto'), 'en', 'IDLESHIFT_UI_LANGUAGE pins auto');
+    process.env.IDLESHIFT_UI_LANGUAGE = 'ja';
+    assert.equal(resolveUiLanguage('auto'), 'ja');
+    assert.equal(resolveUiLanguage('en'), 'en', 'an explicit setting still wins');
+  } finally {
+    if (saved === undefined) delete process.env.IDLESHIFT_UI_LANGUAGE; else process.env.IDLESHIFT_UI_LANGUAGE = saved;
+  }
 
   assert.equal(resolveAiLanguage('en', 'ja'), 'en');
   assert.equal(resolveAiLanguage('ja', 'en'), 'ja');
