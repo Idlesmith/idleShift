@@ -40,12 +40,28 @@ export function isDataHomeMoved(home = dataHome()) {
   }
 }
 
+// Resolve the deepest part of the path that exists on disk and re-append the
+// rest. A folder that does not exist yet must still compare equal to its real
+// parent: on Windows an 8.3 short name (C:\Users\RUNNER~1\...) only expands
+// for the parts that exist, so resolving the whole missing path would keep the
+// short form and miss the project it belongs to.
+function realpathOfDeepestExisting(full) {
+  const rest = [];
+  let cur = full;
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(cur), ...rest); } catch { /* missing: go up */ }
+    const parent = path.dirname(cur);
+    if (parent === cur) return full;
+    rest.unshift(path.basename(cur));
+    cur = parent;
+  }
+}
+
 // Root lookup key: real path, one separator style, lower case on Windows.
 // Used only to find the project a caller belongs to - never as a permission.
 export function normalizeRoot(p) {
   if (typeof p !== 'string' || !p.trim()) return null;
-  let full = path.resolve(p.trim());
-  try { full = fs.realpathSync.native(full); } catch { /* not on disk: keep the resolved text */ }
+  let full = realpathOfDeepestExisting(path.resolve(p.trim()));
   full = full.replace(/[\\/]+$/, '');
   if (process.platform === 'win32') full = full.replace(/\//g, '\\').toLowerCase();
   return full || path.sep;

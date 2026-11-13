@@ -36,7 +36,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --env-file=tests/test.env --test tests/*.test.mjs",
     "start": "node bin/idleshift.mjs gui",
     "dist": "node scripts/build-dist.mjs"
   },
