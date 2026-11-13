@@ -1,0 +1,73 @@
+{
+ "at": "2026-11-13T09:34:22.627Z",
+ "clients": [
+  {
+   "client": "codex-mcp-client",
+   "client_version": "0.167.0-alpha.4.1",
+   "hold_ok_ms": 1600678,
+   "hold_fail_ms": null,
+   "hold_fail_at": null,
+   "cycles": 0,
+   "unattended_cycles": 0,
+   "wait_resumes": 6
+  },
+  {
+   "client": "antigravity-client",
+   "client_version": "v1.0.0",
+   "hold_ok_ms": 151581,
+   "hold_fail_ms": 150016,
+   "hold_fail_at": 1794328809405,
+   "cycles": 132,
+   "unattended_cycles": 82,
+   "wait_resumes": 998
+  },
+  {
+   "client": "claude-code",
+   "client_version": "2.1.321",
+   "hold_ok_ms": 3600359,
+   "hold_fail_ms": 100367,
+   "hold_fail_at": 1794402595472,
+   "cycles": 111,
+   "unattended_cycles": 65,
+   "wait_resumes": 68
+  }
+ ],
+ "participants": [
+  {
+   "id": "P-5",
+   "label": "agy-flash",
+   "client": "antigravity-client",
+   "last_seen": 1794562309930,
+   "cycles": 37
+  },
+  {
+   "id": "P-6",
+   "label": "claude-opus",
+   "client": "claude-code",
+   "last_seen": 1794561984440,
+   "cycles": 88
+  },
+  {
+   "id": "P-11",
+   "label": "codex-terra",
+   "client": "codex-mcp-client",
+   "last_seen": 1794561015321,
+   "cycles": 7
+  },
+  {
+   "id": "P-19",
+   "label": "claude-code",
+   "client": "claude-code",
+   "last_seen": 1794561936488,
+   "cycles": 2
+  },
+  {
+   "id": "P-20",
+   "label": "agy-flash#2",
+   "client": "antigravity-client",
+   "last_seen": 1794552319415,
+   "cycles": 28
+  }
+ ],
+ "events_last_hour": []
+}

@@ -1,0 +1,68 @@
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #d9dee7; --accent: #2f5bd6; --accent-ink: #ffffff;
+  --ok: #1d7a46; --warn: #a15c00; --bad: #b3261e; --chip: #eef1f6; --stop: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --panel: #1d2128; --ink: #e6e9ef; --muted: #98a2b3; --line: #343b47; --accent: #7aa2ff; --accent-ink: #0d1422; --ok: #5fd08d; --warn: #f0b35a; --bad: #ff8a80; --chip: #2a303a; --stop: #e5534b; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 "Segoe UI", "Yu Gothic UI", "Meiryo", system-ui, sans-serif; }
+header { display: flex; align-items: center; gap: 20px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+h1 { font-size: 17px; margin: 0; letter-spacing: .04em; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+h3 { font-size: 14px; margin: 14px 0 6px; }
+nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+nav button { background: none; border: 0; color: var(--muted); padding: 6px 12px; border-radius: 6px; font: inherit; cursor: pointer; }
+nav button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
+main { max-width: 1180px; margin: 0 auto; padding: 18px 20px 60px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.usage-summary { flex-basis: 100%; line-height: 1.8; }
+.usage-paused { color: var(--warn); }
+.tier-policy { margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--line); }
+button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.stop { background: var(--stop); color: #fff; border-color: var(--stop); font-weight: 700; }
+button.link { border: 0; background: none; color: var(--accent); padding: 0; text-align: left; }
+button:disabled { opacity: .5; cursor: default; }
+input[type=text], input[type=number], input[type=datetime-local], textarea, select { font: inherit; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+textarea { min-height: 70px; resize: vertical; }
+label { display: block; margin: 10px 0 3px; font-weight: 600; }
+label.check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 4px 0; }
+label.check input { width: auto; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; white-space: nowrap; }
+.badge.ok { color: var(--ok); } .badge.warn { color: var(--warn); } .badge.bad { color: var(--bad); }
+.list > div { padding: 8px 0; border-top: 1px solid var(--line); }
+.list > div:first-child { border-top: 0; }
+pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 6px 0; font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace; max-height: 320px; overflow: auto; }
+#banner > div { padding: 8px 20px; background: var(--chip); border-bottom: 1px solid var(--line); }
+#banner .alert { color: var(--bad); font-weight: 600; }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); width: min(760px, 94vw); max-height: 90vh; padding: 18px 20px; }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+#toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; z-index: 20; max-width: 80vw; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.timeline { display: grid; gap: 8px; overflow-x: auto; align-items: start; padding-bottom: 6px; }
+.lane-head { font-weight: 600; padding: 6px 8px; border-bottom: 2px solid var(--line); min-width: 190px; }
+.lane-head.closed { color: var(--muted); text-decoration: line-through; }
+.node { border: 1px solid var(--line); border-left: 4px solid var(--muted); border-radius: 8px; padding: 6px 8px; background: var(--bg); min-width: 190px; cursor: pointer; text-align: left; display: block; width: 100%; }
+.node.accepted { border-left-color: var(--ok); } .node.claimed, .node.offered { border-left-color: var(--accent); }
+.node.needs_check, .node.parked { border-left-color: var(--warn); } .node.cancelled { opacity: .55; }
+.node.facilitator { border-style: dashed; }
+.kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; }
+.kv > div:nth-child(odd) { color: var(--muted); }
+.hint { background: var(--chip); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; }
+td, th { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; border-top: 0; }
+.md { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; margin: 6px 0; max-height: 480px; overflow: auto; word-break: break-word; }
+.md p { margin: 6px 0; } .md h3, .md h4, .md h5, .md h6 { margin: 10px 0 4px; } .md ul, .md ol { margin: 4px 0; padding-left: 1.6em; }
+.md code { font: 12.5px Consolas, "Cascadia Mono", monospace; background: var(--chip); padding: 0 4px; border-radius: 4px; }
+.md pre { max-height: none; } .md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.md table { margin: 6px 0; } .md hr { border: 0; border-top: 1px solid var(--line); }
+.row select,.row input[type=number] { width: auto; }
+.card.archived { opacity: .8; border-style: dashed; }

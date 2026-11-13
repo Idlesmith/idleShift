@@ -1,0 +1,45 @@
+{
+  "name": "idleshift",
+  "version": "0.1.0",
+  "description": "Local MCP blackboard that lets the AI subscriptions you already have share goals and tasks, with budgets, usage limits and human-only approval.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "multi-agent",
+    "blackboard",
+    "task-queue",
+    "claude",
+    "codex",
+    "local-first",
+    "windows"
+  ],
+  "type": "module",
+  "bin": {
+    "idleshift": "bin/idleshift.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "gui/",
+    "README.md",
+    "README.ja.md",
+    "LICENSE",
+    "NOTICE",
+    "TRADEMARKS.md",
+    "CHANGELOG.md"
+  ],
+  "os": [
+    "win32"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "node bin/idleshift.mjs gui",
+    "dist": "node scripts/build-dist.mjs"
+  },
+  "license": "Apache-2.0",
+  "private": true
+}

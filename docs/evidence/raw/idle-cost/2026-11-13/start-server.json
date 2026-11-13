@@ -1,0 +1,130 @@
+{
+ "at": "2026-11-13T08:33:33.373Z",
+ "clients": [
+  {
+   "client": "codex-mcp-client",
+   "client_version": "0.167.0-alpha.4.1",
+   "hold_ok_ms": 400163,
+   "hold_fail_ms": null,
+   "hold_fail_at": null,
+   "cycles": 0,
+   "unattended_cycles": 0,
+   "wait_resumes": 4
+  },
+  {
+   "client": "antigravity-client",
+   "client_version": "v1.0.0",
+   "hold_ok_ms": 151581,
+   "hold_fail_ms": 150016,
+   "hold_fail_at": 1794328809405,
+   "cycles": 132,
+   "unattended_cycles": 82,
+   "wait_resumes": 998
+  },
+  {
+   "client": "claude-code",
+   "client_version": "2.1.321",
+   "hold_ok_ms": 3600359,
+   "hold_fail_ms": 100367,
+   "hold_fail_at": 1794402595472,
+   "cycles": 111,
+   "unattended_cycles": 65,
+   "wait_resumes": 66
+  }
+ ],
+ "participants": [
+  {
+   "id": "P-5",
+   "label": "agy-flash",
+   "client": "antigravity-client",
+   "last_seen": 1794558766797,
+   "cycles": 37
+  },
+  {
+   "id": "P-6",
+   "label": "claude-opus",
+   "client": "claude-code",
+   "last_seen": 1794558378393,
+   "cycles": 88
+  },
+  {
+   "id": "P-11",
+   "label": "codex-terra",
+   "client": "codex-mcp-client",
+   "last_seen": 1794558609188,
+   "cycles": 7
+  },
+  {
+   "id": "P-19",
+   "label": "claude-code",
+   "client": "claude-code",
+   "last_seen": 1794558333726,
+   "cycles": 2
+  },
+  {
+   "id": "P-20",
+   "label": "agy-flash#2",
+   "client": "antigravity-client",
+   "last_seen": 1794552319415,
+   "cycles": 28
+  }
+ ],
+ "events_last_hour": [
+  {
+   "type": "client_version_changed",
+   "n": 1
+  },
+  {
+   "type": "decision_answered",
+   "n": 4
+  },
+  {
+   "type": "decision_raised",
+   "n": 3
+  },
+  {
+   "type": "participant_removed",
+   "n": 4
+  },
+  {
+   "type": "participant_resumed",
+   "n": 4
+  },
+  {
+   "type": "plan_applied",
+   "n": 5
+  },
+  {
+   "type": "profile_updated",
+   "n": 2
+  },
+  {
+   "type": "service_started",
+   "n": 1
+  },
+  {
+   "type": "summary_updated",
+   "n": 2
+  },
+  {
+   "type": "task_claimed",
+   "n": 7
+  },
+  {
+   "type": "task_created",
+   "n": 7
+  },
+  {
+   "type": "task_offered",
+   "n": 7
+  },
+  {
+   "type": "task_reported",
+   "n": 8
+  },
+  {
+   "type": "worktree_created",
+   "n": 1
+  }
+ ]
+}
