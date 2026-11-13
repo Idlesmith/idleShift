@@ -24,5 +24,7 @@ test('add_goal: refused from a finished template, cannot mix with other ops, ref
   assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: 'b' }, { op: 'add_evidence', text: 't' }] }));
   assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: '' }] }), e => e.code === 'bad_input');
   core.run("UPDATE goals SET status='done' WHERE id=?", goal);
-  assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: 'a' }] }), e => e.code === 'goal_not_active');
+  const r = core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: 'a' }] });
+  assert.equal(core.goal(r.created[0].goal).status, 'active', 'done template can still seed a goal');
+  assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_evidence', text: 't' }] }), e => e.code === 'goal_not_active');
 });

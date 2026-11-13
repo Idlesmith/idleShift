@@ -3,18 +3,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeCore, seed, joinAs } from './helpers.mjs';
 
-test('S-5: add_goal refuses stopped, paused, done and done_candidate templates', () => {
+test('S-5: add_goal accepts non-active templates (inherits delegation); other ops still need active', () => {
   const { core } = makeCore();
   const { root, goal } = seed(core);
   const p = joinAs(core, root, 'fac', 'c1');
 
   for (const status of ['stopped', 'paused', 'done', 'done_candidate']) {
     core.run('UPDATE goals SET status=? WHERE id=?', status, goal);
-    assert.throws(
-      () => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: `from-${status}` }] }, { conn: 'c1' }),
-      e => e.code === 'goal_not_active',
-      `template with status=${status} must be refused`
-    );
+    const r = core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: `from-${status}` }] }, { conn: 'c1' });
+    assert.ok(r.created[0].goal, `template with status=${status} may seed a goal`);
+    core.run("UPDATE goals SET status='archived_tmp' WHERE project_id=? AND id<>?", core.goal(goal).project_id, goal);
   }
 
   // Active template still works
