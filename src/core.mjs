@@ -1727,8 +1727,8 @@ export class Core extends EventEmitter {
       const g = this.goal(args.goal);
       if (g.project_id !== p.project_id) throw new Refusal('other_project', this.tAi('refusal.other_project'));
       if (this.activeProject(p.project_id).stopped) throw new Refusal('stopped', this.tAi('refusal.stopped'));
-      if (!['active'].includes(g.status)) throw new Refusal('goal_not_active', this.tAi('refusal.goal_not_active', g.status));
       const goalOnly = ops.every(o => o?.op === 'add_goal');
+      if (!goalOnly && g.status !== 'active') throw new Refusal('goal_not_active', this.tAi('refusal.goal_not_active', g.status));
       if (goalOnly) return this.addGoalsFrom(g, p, ops);
       const appendOnly = ops.every(o => o?.op === 'add_evidence');
       if (!appendOnly && Number(args.base_version) !== g.plan_version) {
@@ -1885,7 +1885,6 @@ export class Core extends EventEmitter {
   // A new goal inherits the template goal's delegation and budgets and may only
   // narrow them, so an AI can never widen what a human allowed.
   addGoalsFrom(g, p, ops) {
-    if (g.status !== 'active') throw new Refusal('goal_not_active', this.tAi('refusal.goal_not_active', g.status));
     if (ops.length > 3) throw new Refusal('bad_input', this.tAi('plan.add_goal_limit'));
     const aiGoalLimit = Number(this.meta(`ai_goal_limit:${g.project_id}`) || 10);
     const aiAssignLimit = Number(this.meta(`ai_assign_limit:${g.project_id}`) || 300);
