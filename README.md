@@ -24,7 +24,7 @@ Things other tools also do (so we do not claim them as unique): a shared MCP tas
 | Platform | **Windows only** (tested on Windows 11). Mac/Linux not supported yet. |
 | Runtime | Node.js 22.13 or later (built-in `node:sqlite`). CI uses Node 24. **No npm dependencies.** |
 | AI apps confirmed to work | Claude Code (CLI and the Code tab of Claude Desktop), Codex CLI, Antigravity. Claude Desktop **chat** is not verified. |
-| Tests | 213 passing (`npm test`, 2026-11-13). |
+| Tests | 215 passing (`npm test`, 2026-11-13). |
 | Per-task git worktrees | Core implemented (not released); the merge/discard screen is not done yet. |
 | Low usage while waiting | Idle agents cost almost nothing: in our test, three AIs waiting for an hour used 0–2% of a 5-hour quota (Plus/Pro plans, measured once on 2026-11-13; [details](docs/evidence/raw/idle-cost/2026-11-13/README.md)). |
 
@@ -42,7 +42,7 @@ A self-contained Windows zip with Node included can be built with `npm run dist`
 
 ## Quick start
 
-The GUI and the messages sent to AIs are **Japanese only** for now; English is planned ([docs/i18n.md](docs/i18n.md)).
+The GUI follows your Windows language (English or Japanese) and can be switched in settings. Messages sent to AIs are in English by default ([docs/i18n.md](docs/i18n.md)).
 
 1. **Create a project** in the GUI and register your working folder (an absolute path).
 2. **Connect your AI apps** in the *接続* (Connections) tab. IdleShift adds itself as an MCP server to each app's config (it keeps a backup and shows the change first). Restart the app afterwards.
@@ -76,7 +76,7 @@ AI apps (Claude Code / Codex / Antigravity)         You
 - **Open findings before release:** AI-created goals can reach other AIs as if written by a human (high); an AI can re-use a stopped goal's permissions as a template (medium); and four more medium issues. Fixes are in progress.
 - IdleShift cannot stop what an AI does inside its own app. Its delegation settings are requests; enforcement depends on each app's permission settings.
 - An attacker running code as the same Windows user can read the service token.
-- **Data folder:** currently `%LOCALAPPDATA%\IdleShift`. When the service is started from the Microsoft Store version of Claude Desktop, Windows redirects that folder, which can split your data in two. Moving to `%USERPROFILE%\.idleshift` is planned ([docs/data-home.md](docs/data-home.md)).
+- **Data folder:** `%USERPROFILE%\.idleshift`. Older versions used `%LOCALAPPDATA%\IdleShift`, which the Microsoft Store version of Claude Desktop redirects; `gui` moves old data over automatically on first start ([docs/data-home.md](docs/data-home.md)).
 
 ## Vendor terms
 

@@ -45,7 +45,7 @@ AIアプリ(Claude/Codex/Antigravity…)          人
 
 - GUI と MCP は同じ `Core` を通るので、状態・権限・判定が二重になりません。
 - MCP 用にポートは開きません（stdio 中継＋名前付きパイプ）。GUI だけが 127.0.0.1 の無作為ポートを使い、トークン・Host/Origin 検査・サイズ/頻度制限・厳格な CSP を付けています。
-- データは現在 `%LOCALAPPDATA%\IdleShift`（同期フォルダー外）。**Claude デスクトップ（ストア版）から起動すると、この場所が別の場所に振り替えられてデータが分かれる不具合があり、`%USERPROFILE%\.idleshift` への移行を予定しています（[docs/data-home.md](docs/data-home.md)）。**インストール先は `%LOCALAPPDATA%\Programs\IdleShift` で固定なので、更新しても AI アプリ側の登録は壊れません。
+- データは `%USERPROFILE%\.idleshift`（同期フォルダー外）。以前の版は `%LOCALAPPDATA%\IdleShift` を使っていましたが、Claude デスクトップ（ストア版）がこの場所を振り替えるため移しました。古いデータは `gui` の初回起動時に自動で移行されます（[docs/data-home.md](docs/data-home.md)）。インストール先は `%LOCALAPPDATA%\Programs\IdleShift` で固定なので、更新しても AI アプリ側の登録は壊れません。
 
 ## MCP ツール（7 個・標準機能のみ）
 
