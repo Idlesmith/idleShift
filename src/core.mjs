@@ -10,7 +10,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeRoot, isInside, dataHome, worktreesDir, worktreePath } from './paths.mjs';
-import { detectRepo, branchExists, createWorktree, worktreeStatus, diffStats, removeWorktree, checkMergeConflict, executeMerge, pruneRepoWorktrees } from './git.mjs';
+import { detectRepo, branchExists, createWorktree, worktreeStatus, diffStats, removeWorktree, checkMergeConflict, executeMerge, pruneRepoWorktrees, hasGitIdentity } from './git.mjs';
 import { t, resolveUiLanguage, resolveAiLanguage } from './i18n/index.mjs';
 
 export class Refusal extends Error {
@@ -1455,6 +1455,7 @@ export class Core extends EventEmitter {
           this.tAi('assignment.ws_rule_2'),
           this.tAi('assignment.ws_rule_3')
         ];
+        if (!hasGitIdentity(wt.path)) rules.push(this.tAi('assignment.ws_identity'));
         if (notice?.dirtyCount > 0) rules.push(this.tAi('assignment.ws_dirty', notice.dirtyCount));
         if (st.uncommittedCount > 0) rules.push(this.tAi('assignment.ws_uncommitted', st.uncommittedCount));
         workspace = {

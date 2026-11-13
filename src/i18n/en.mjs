@@ -145,6 +145,7 @@ export default {
   'assignment.ws_rule_1': 'Edit only inside workspace.path; never touch the main folder or other branches.',
   'assignment.ws_rule_2': 'Commit your changes to this branch before calling report(kind="result"). Do not push.',
   'assignment.ws_rule_3': 'Uncommitted changes will not be included when the human merges.',
+  'assignment.ws_identity': 'Git identity is not configured. Commit using git -c user.name=IdleShift -c user.email=idleshift@localhost commit.',
   'assignment.ws_dirty': n => `${n} uncommitted human changes are not included in the base commit.`,
   'assignment.ws_uncommitted': n => `${n} uncommitted changes remain from a previous assignee.`,
   'assignment.ws_reason_git_off': 'Git isolation is disabled in goal settings.',

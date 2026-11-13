@@ -110,8 +110,17 @@ export function removeWorktree({ repoRoot, worktreePath, branch, force = false, 
   return { ok: errors.length === 0, error: errors.join('; ') };
 }
 
+export function hasGitIdentity(repoRoot) {
+  return ['user.name', 'user.email'].every(key => {
+    const r = runGit(repoRoot, ['config', '--get', key]);
+    return r.ok && !!r.stdout.trim();
+  });
+}
+
 export function checkMergeConflict(repoRoot, targetBranch, featureBranch) {
   if (!repoRoot || !fs.existsSync(repoRoot)) return { ok: false, conflict: false, reason: 'リポジトリが見つかりません' };
+  const ancestor = runGit(repoRoot, ['merge-base', '--is-ancestor', targetBranch, featureBranch]);
+  if (ancestor.ok) return { ok: true, conflict: false, reason: '' };
   const r = runGit(repoRoot, ['merge-tree', '--write-tree', targetBranch, featureBranch]);
   if (!r.ok) {
     // If exit code is 1 and stdout has conflict markers, or stderr indicates syntax error
@@ -143,7 +152,8 @@ export function executeMerge({ repoRoot, branch, title, taskId }) {
   if (ff.ok) return { ok: true, method: 'ff' };
   // If not ff, non-ff with message
   const msg = `IdleShift: merge ${taskId} ${title || ''}`.trim();
-  const noFf = runGit(repoRoot, ['merge', '--no-ff', '-m', msg, branch]);
+  const identity = hasGitIdentity(repoRoot) ? [] : ['-c', 'user.name=IdleShift', '-c', 'user.email=idleshift@localhost'];
+  const noFf = runGit(repoRoot, [...identity, 'merge', '--no-ff', '-m', msg, branch]);
   if (noFf.ok) return { ok: true, method: 'no-ff' };
   // Failed, abort
   runGit(repoRoot, ['merge', '--abort']);

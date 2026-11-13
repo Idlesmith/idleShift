@@ -145,6 +145,7 @@ export default {
   'assignment.ws_rule_1': '渡された作業フォルダー（workspace.path）の中だけで編集し、メインのフォルダーや他のブランチには触れない。',
   'assignment.ws_rule_2': '変更はこのブランチにコミットしてから report(kind="result") する。push はしない。',
   'assignment.ws_rule_3': 'コミットされていない変更は、人がマージするときに取り込まれない。',
+  'assignment.ws_identity': 'Git の名前またはメールが未設定です。git -c user.name=IdleShift -c user.email=idleshift@localhost commit でコミットしてください。',
   'assignment.ws_dirty': n => `人の未コミットの変更 ${n} 件は起点に含まれていない`,
   'assignment.ws_uncommitted': n => `前の担当による未コミットの変更が ${n} 件残っています`,
   'assignment.ws_reason_git_off': 'ゴール設定で git 分離が OFF になっています',
