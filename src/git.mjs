@@ -117,6 +117,22 @@ export function hasGitIdentity(repoRoot) {
   });
 }
 
+// Old merge-tree produces a textual preview rather than a status code.
+// Structural conflicts cannot always be identified reliably, so fail closed.
+export function checkLegacyMergeConflict(repoRoot, targetBranch, featureBranch) {
+  const base = runGit(repoRoot, ['merge-base', targetBranch, featureBranch]);
+  if (!base.ok || !base.stdout) return null;
+  const preview = runGit(repoRoot, ['merge-tree', base.stdout.trim(), targetBranch, featureBranch]);
+  if (!preview.ok || preview.stderr) return null;
+  if (/^\+<{7}(?: |$)/m.test(preview.stdout) && /^\+={7}$/m.test(preview.stdout) && /^\+>{7}(?: |$)/m.test(preview.stdout)) {
+    return { ok: false, conflict: true, files: [preview.stdout], reason: '競合が発生します' };
+  }
+  // Delete/modify, binary and other structural changes need the modern check.
+  if (/^(removed in |added in both|changed in both)/m.test(preview.stdout) &&
+      (/^removed in /m.test(preview.stdout) || /Binary files|^added in both/m.test(preview.stdout))) return null;
+  return { ok: true, conflict: false, reason: '' };
+}
+
 export function checkMergeConflict(repoRoot, targetBranch, featureBranch) {
   if (!repoRoot || !fs.existsSync(repoRoot)) return { ok: false, conflict: false, reason: 'リポジトリが見つかりません' };
   const ancestor = runGit(repoRoot, ['merge-base', '--is-ancestor', targetBranch, featureBranch]);
@@ -140,6 +156,11 @@ export function checkMergeConflict(repoRoot, targetBranch, featureBranch) {
       return { ok: false, conflict: true, files: files.length ? files : [r.stdout], reason: '競合が発生します' };
     }
     const avail = gitAvailable(repoRoot);
+    const version = avail.version?.match(/^(\d+)\.(\d+)$/);
+    if (version && (Number(version[1]) < 2 || (Number(version[1]) === 2 && Number(version[2]) < 38))) {
+      const legacy = checkLegacyMergeConflict(repoRoot, targetBranch, featureBranch);
+      if (legacy) return legacy;
+    }
     return { ok: false, conflict: false, reason: `git merge-tree が失敗しました（git 2.38以上が必要です。現在: ${avail.version || '不明'}）` };
   }
   return { ok: true, conflict: false, reason: '' };
