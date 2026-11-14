@@ -1968,7 +1968,9 @@ export class Core extends EventEmitter {
   // narrow them, so an AI can never widen what a human allowed.
   addGoalsFrom(host, p, ops) {
     // Goals proposed from the idle-time proposal task wait for a human and inherit from the last finished goal.
-    const templateId = this.meta(`idle_goal:${host.id}`);
+    // Whoever holds a proposal task is always proposing, whatever template goal (or none) the call names.
+    const heldProposal = this.one("SELECT goal_id FROM tasks WHERE assignee=? AND kind='proposal' AND state='claimed'", p.id);
+    const templateId = (heldProposal && this.meta(`idle_goal:${heldProposal.goal_id}`)) || this.meta(`idle_goal:${host.id}`);
     const proposed = !!templateId;
     const g = proposed ? (this.one('SELECT * FROM goals WHERE id=?', templateId) || host) : host;
     if (ops.length > 3) throw new Refusal('bad_input', this.tAi('plan.add_goal_limit'));
@@ -2010,7 +2012,7 @@ export class Core extends EventEmitter {
       this.event('goal_created_by_ai', { project: g.project_id, goal: id, participant: p.id, data: { template: g.id, title: clip(title, 200) } });
       created.push({ goal: id });
     }
-    if (proposed) this.notify('proposal', host.project_id);
+    if (proposed) this.notify('proposal', p.project_id);
     return { applied: true, created, header: this.header(p, this.myTasks(p.id).length ? 'report' : 'next') };
   }
 

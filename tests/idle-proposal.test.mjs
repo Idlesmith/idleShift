@@ -91,3 +91,21 @@ test('idle: a project with no finished goal gets no proposal', () => {
   core.tick(); core.tick();
   assert.equal(proposalTasks(core, project).length, 0);
 });
+
+test('idle: a proposal-task holder always creates proposed goals, even with no goal or another template', async () => {
+  const { core } = makeCore(); const { root, project, goal } = seed(core);
+  const p = joinAs(core, root, 'planner', 'c1');
+  finish(core, goal);
+  const other = core.createGoal(project, { title: '別の既存ゴール' }).id; // active, a tempting template
+  core.run("UPDATE tasks SET state='cancelled' WHERE goal_id=?", other);
+  core.run("UPDATE goals SET status='paused' WHERE id=?", other);
+  core.tick();
+  core.run("UPDATE goals SET status='done', closed_at=? WHERE id=?", core.now(), other);
+  core.tick();
+  const got = await take(core, p);
+  assert.equal(got.offer.task_kind, 'proposal');
+  const noGoal = core.plan({ participant: p, ops: [{ op: 'add_goal', title: 'goal省略' }] });
+  const otherTpl = core.plan({ participant: p, goal: other, ops: [{ op: 'add_goal', title: '別ひな型' }] });
+  assert.equal(core.goal(noGoal.created[0].goal).status, 'proposed');
+  assert.equal(core.goal(otherTpl.created[0].goal).status, 'proposed');
+});
