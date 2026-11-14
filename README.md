@@ -24,7 +24,7 @@ Things other tools also do (so we do not claim them as unique): a shared MCP tas
 | Platform | **Windows only** (tested on Windows 11). Mac/Linux not supported yet. |
 | Runtime | Node.js 22.13 or later (built-in `node:sqlite`). CI uses Node 24. **No npm dependencies.** |
 | AI apps confirmed to work | Claude Code (CLI and the Code tab of Claude Desktop), Codex CLI, Antigravity. Claude Desktop **chat** is not verified. |
-| Tests | 259 passing (`npm test`, 2026-11-14). |
+| Tests | 260 passing (`npm test`, 2026-11-14). |
 | Per-task git worktrees | Core implemented (not released); the merge/discard screen is not done yet. |
 | Low usage while waiting | Idle agents cost almost nothing: in our test, three AIs waiting for an hour used 0–2% of a 5-hour quota (Plus/Pro plans, measured once on 2026-11-13; [details](docs/evidence/raw/idle-cost/2026-11-13/README.md)). |
 
@@ -67,7 +67,7 @@ AI apps (Claude Code / Codex / Antigravity)         You
 
 - Eight MCP tools: `join`, `next`, `claim`, `get`, `report`, `plan`, `usage`, `status`. Standard MCP only.
 - **Usage-aware routing & privacy:** Active fresh usage windows (`fetched_at` < 30 min, `resets_at` in future) influence `next` and `claim`: `>= 90%` (configurable 1–100% or off in the GUI) prefers `read_only` tasks and defers `writes` / `implement` work while a healthier peer is available (within `preferGrace`); `100%` pauses new offers until `resets_at`. Stale, expired, or missing usage falls back to normal routing. Availability by source:
-  - **Codex CLI / Desktop**: automatic read-only tail scan (last 256 KiB) of `${CODEX_HOME:-~/.codex}/sessions/**/rollout-*.jsonl` for `rate_limits` (`primary`/`secondary`). Conversation text and `auth.json` are never read.
+  - **Codex CLI / Desktop**: automatic read-only tail scan (last 256 KiB bytes) of `${CODEX_HOME:-~/.codex}/sessions/**/rollout-*.jsonl`. While any conversation text present in that 256 KiB byte tail is read into local memory during scanning, the collector immediately discards non-quota data and extracts, stores, and exposes only `rate_limits` (`primary`/`secondary`). `auth.json` is never read.
   - **Claude Code**: passive read of `%APPDATA%\quota-clock\claude-code.json` (or `$XDG_CONFIG_HOME/quota-clock` / `QUOTA_CLOCK_HOME`), populated via a `statusLine` command such as `"command": "quota-clock statusline"` in `~/.claude/settings.json` (or `quota-clock statusline --chain "<existing>"`).
   - **Antigravity**: passive read of `%APPDATA%\quota-clock\antigravity.json` (e.g., `quota-clock statusline --source antigravity`). IdleShift never invokes `agy` or calls network APIs.
   - **Claude Desktop (chat) / other apps**: AI self-reporting via `join` / `report` (`quota.windows`: `label`, `used_percent`, `resets_at`) or manual/CLI entry (`node bin/idleshift.mjs usage sync|list|set|rm`).
@@ -91,7 +91,7 @@ You use IdleShift with **your own** accounts, under each vendor's terms. Do not 
 
 ## FAQ
 
-**Does it phone home or read my conversations/credentials to track usage?** No. IdleShift never connects to the internet, never calls vendor APIs, and never reads `auth.json` or chat transcripts. It counts claimed tasks/minutes in SQLite, accepts AI self-reports (`quota.windows`) and manual CLI/GUI entries, and reads only allowlisted rate-limit fields from local Codex session tails and local `quota-clock` JSON cache files.
+**Does it phone home or store my conversations/credentials to track usage?** No. IdleShift never connects to the internet, never calls vendor APIs, and never reads `auth.json`. It counts claimed tasks/minutes in SQLite, accepts AI self-reports (`quota.windows`) and manual CLI/GUI entries, and reads local `quota-clock` JSON cache files plus the last 256 KiB bytes of local Codex session files (extracting, saving, and passing only allowlisted `rate_limits` fields — any conversation text in that tail is ignored in memory and never stored or sent to AIs).
 
 **Does the AI keep its whole conversation?** No. What survives is what was written to the blackboard: goals, summaries, reports, evidence, files.
 

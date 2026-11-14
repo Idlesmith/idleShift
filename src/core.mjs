@@ -1263,9 +1263,17 @@ export class Core extends EventEmitter {
     if (g.assignments_used >= b.max_assignments) { this.budgetDecision(g, b); return false; }
     if (t.prefer && ![p.id.toLowerCase(), p.label, p.client].includes(t.prefer)) {
       // Preferred assignee first; after a grace period anyone may take it so a
-      // missing app cannot block the goal.
+      // missing or limit-blocked app cannot block the goal.
       if (this.now() - t.opened_at < this.t.preferGrace) return false;
-      for (const [wid] of this.waiters) { const w = this.one('SELECT id,label,client FROM participants WHERE id=?', wid); if (w && [w.id.toLowerCase(), w.label, w.client].includes(t.prefer)) return false; }
+      for (const [wid, wait] of this.waiters) {
+        if (wait.project !== t.project_id) continue;
+        const w = this.one('SELECT * FROM participants WHERE id=?', wid);
+        if (!w || w.revoked || this.meta(`participant_removed:${w.id}`)) continue;
+        if (![w.id.toLowerCase(), w.label, w.client].includes(t.prefer)) continue;
+        if (this.isExcluded(t, w) || !this.tierAllows(t, w)) continue;
+        if (this.limited(w.client) || this.usageBlock(t.project_id, w.label) || this.serviceUsageLimit(w)) continue;
+        return false;
+      }
     }
     return true;
   }

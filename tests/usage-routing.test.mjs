@@ -261,3 +261,23 @@ test('usage deferral threshold is configurable via core and GUI HTTP API', async
   assert.equal((await svc.ctx.core.next({ participant: codex })).kind, 'offer');
   assert.ok(claude);
 });
+
+test('100%-limited preferred waiter does not block healthy participant after preferGrace', async () => {
+  const { core, advance, ids, created } = await setupWithClients(
+    { preferred: 'codex-mcp-client', healthy: 'claude-ai' },
+    [{ title: 'preferred read task', ...READ, prefer: 'preferred' }],
+  );
+
+  // Move past preferGrace while codex usage hits 100% and preferred is waiting
+  advance(core.t.preferGrace + 1000);
+  setUsage(core, 'codex', '5h', 100, 30 * MIN);
+  const preferredWait = core.next({ participant: ids.preferred, wait_seconds: 3600 });
+
+  // Healthy participant must receive the preferred task instead of being blocked by a 100%-limited waiter
+  const healthyOffer = await core.next({ participant: ids.healthy });
+  assert.equal(healthyOffer.kind, 'offer');
+  assert.equal(healthyOffer.task, created[0]);
+
+  core.cancelWait(ids.preferred);
+  void preferredWait;
+});
