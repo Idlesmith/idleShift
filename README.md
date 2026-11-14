@@ -13,7 +13,7 @@ IdleShift is a local blackboard that lets the AI apps you already use — Claude
 1. **It does not launch your AIs behind your back.** AIs join from the app you already have open and *pull* work with an MCP tool (`next`). No all-permissions flags. An optional CLI launcher exists but is off unless you turn it on.
 2. **Humans hold the keys.** Only a person can widen what an AI is allowed to do, or confirm that a goal is done. An AI's own claims do not change its permissions or budget.
    *Two known gaps are being fixed before release — see [Security](#security-and-known-limitations).*
-3. **It routes around usage limits — by what you and the AIs tell it.** When an AI reports it hit its limit (with a reset time), it gets no new work until then, and the task can go to another AI. You can also set 5-hour and 7-day caps per AI. IdleShift does **not** read your vendor usage meters.
+3. **It routes around usage limits — using local meters, AI reports, and human caps.** IdleShift collects 5-hour and weekly usage windows locally where available (Codex rollout logs, Claude Code / Antigravity `quota-clock` statusline caches), accepts AI self-reports and manual/CLI entries, and lets you set 5-hour and 7-day caps per AI. At high usage (90%+ by default), `writes`/`implement` tasks defer to healthier peers; at 100% (or a limit report), offers pause until `resets_at`. IdleShift still makes **no** network calls or vendor API queries.
 
 Things other tools also do (so we do not claim them as unique): a shared MCP task board for several AIs, state that survives the chat, using your existing subscriptions. See the [comparison](docs/self-study/03-competitors.md).
 
@@ -24,7 +24,7 @@ Things other tools also do (so we do not claim them as unique): a shared MCP tas
 | Platform | **Windows only** (tested on Windows 11). Mac/Linux not supported yet. |
 | Runtime | Node.js 22.13 or later (built-in `node:sqlite`). CI uses Node 24. **No npm dependencies.** |
 | AI apps confirmed to work | Claude Code (CLI and the Code tab of Claude Desktop), Codex CLI, Antigravity. Claude Desktop **chat** is not verified. |
-| Tests | 231 passing (`npm test`, 2026-11-14). |
+| Tests | 259 passing (`npm test`, 2026-11-14). |
 | Per-task git worktrees | Core implemented (not released); the merge/discard screen is not done yet. |
 | Low usage while waiting | Idle agents cost almost nothing: in our test, three AIs waiting for an hour used 0–2% of a 5-hour quota (Plus/Pro plans, measured once on 2026-11-13; [details](docs/evidence/raw/idle-cost/2026-11-13/README.md)). |
 
@@ -65,7 +65,12 @@ AI apps (Claude Code / Codex / Antigravity)         You
                                         +--- adapters (optional CLI launch, off by default)
 ```
 
-- Seven MCP tools: `join`, `next`, `claim`, `get`, `report`, `plan`, `status`. Standard MCP only.
+- Eight MCP tools: `join`, `next`, `claim`, `get`, `report`, `plan`, `usage`, `status`. Standard MCP only.
+- **Usage-aware routing & privacy:** Active fresh usage windows (`fetched_at` < 30 min, `resets_at` in future) influence `next` and `claim`: `>= 90%` (configurable 1–100% or off in the GUI) prefers `read_only` tasks and defers `writes` / `implement` work while a healthier peer is available (within `preferGrace`); `100%` pauses new offers until `resets_at`. Stale, expired, or missing usage falls back to normal routing. Availability by source:
+  - **Codex CLI / Desktop**: automatic read-only tail scan (last 256 KiB) of `${CODEX_HOME:-~/.codex}/sessions/**/rollout-*.jsonl` for `rate_limits` (`primary`/`secondary`). Conversation text and `auth.json` are never read.
+  - **Claude Code**: passive read of `%APPDATA%\quota-clock\claude-code.json` (or `$XDG_CONFIG_HOME/quota-clock` / `QUOTA_CLOCK_HOME`), populated via a `statusLine` command such as `"command": "quota-clock statusline"` in `~/.claude/settings.json` (or `quota-clock statusline --chain "<existing>"`).
+  - **Antigravity**: passive read of `%APPDATA%\quota-clock\antigravity.json` (e.g., `quota-clock statusline --source antigravity`). IdleShift never invokes `agy` or calls network APIs.
+  - **Claude Desktop (chat) / other apps**: AI self-reporting via `join` / `report` (`quota.windows`: `label`, `used_percent`, `resets_at`) or manual/CLI entry (`node bin/idleshift.mjs usage sync|list|set|rm`).
 - Tasks move `open → offered → claimed → reported → accepted`. Generations stop stale reports; `report_id` stops duplicates. A write task whose AI disappears goes to a human check, not silently to another AI.
 - Text written by one AI reaches another as `untrusted_ai_*` data, not as instructions.
 - **Waiting on you is visible.** When the only things left are human actions (a merge, a decision, confirming a goal), the GUI and an OS notification say what is waiting, with the task/decision/goal IDs. A waiting AI gets the same list from `next` (`none` with `reason` and `waiting_on`).
@@ -86,7 +91,7 @@ You use IdleShift with **your own** accounts, under each vendor's terms. Do not 
 
 ## FAQ
 
-**Does it read my Claude/ChatGPT usage?** No. It counts claimed tasks and minutes, and listens to what the AI reports.
+**Does it phone home or read my conversations/credentials to track usage?** No. IdleShift never connects to the internet, never calls vendor APIs, and never reads `auth.json` or chat transcripts. It counts claimed tasks/minutes in SQLite, accepts AI self-reports (`quota.windows`) and manual CLI/GUI entries, and reads only allowlisted rate-limit fields from local Codex session tails and local `quota-clock` JSON cache files.
 
 **Does the AI keep its whole conversation?** No. What survives is what was written to the blackboard: goals, summaries, reports, evidence, files.
 

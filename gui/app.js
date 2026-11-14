@@ -496,6 +496,7 @@ function usageWindowsPanel() {
   const reset = h('input', { type: 'datetime-local', 'aria-label': gt('usage.reset') });
   const percent = h('input', { type: 'number', min: 0, max: 100, step: 'any', 'aria-label': gt('usage.percent') });
   const period = h('input', { type: 'number', min: 1, step: 1, 'aria-label': gt('usage.period') });
+  const deferPercent = h('input', { type: 'number', min: 1, max: 100, step: 'any', value: S.usage_policy?.defer_writes_percent ?? '', placeholder: gt('usage.defer_hint'), 'aria-label': gt('usage.defer_writes') });
   const rows = [...(S.usage_windows || [])].sort((a, b) => a.remaining_minutes - b.remaining_minutes);
   const labels = serviceName => S.projects.flatMap(p => p.participants.filter(x => x.usage_service === serviceName).map(x => `${p.name}: ${x.label}`)).join(', ');
   return h('div', { class: 'card' }, h('h2', {}, gt('usage.title')),
@@ -503,6 +504,8 @@ function usageWindowsPanel() {
     rows.length ? h('div', { class: 'list' }, rows.map(r => h('div', { class: r.stale ? 'small muted' : 'small' },
       `${r.service} / ${r.window} — ${r.used_percent == null ? '—' : Math.round(r.used_percent) + '%'} — ${gt('usage.remaining', r.remaining_minutes)} — ${fmt(r.resets_at)} — ${r.source} — ${r.fetched_at ? fmt(r.fetched_at) : '—'}${r.stale ? ' (' + gt('usage.stale') + ')' : ''}`,
       labels(r.service) ? h('div', {}, labels(r.service)) : null))) : h('p', { class: 'muted' }, gt('usage.empty')),
+    h('div', { class: 'grid2' }, field(gt('usage.defer_writes'), deferPercent)),
+    h('button', { onclick: () => act(() => api('setUsagePolicy', { defer_writes_percent: deferPercent.value === '' ? null : Number(deferPercent.value) }), gt('usage.policy_saved')) }, gt('usage.save')),
     h('h3', {}, gt('usage.manual')), h('div', { class: 'grid2' }, field(gt('usage.service'), service), field(gt('usage.window'), windowName), field(gt('usage.reset'), reset), field(gt('usage.percent'), percent), field(gt('usage.period'), period)),
     h('button', { onclick: () => act(() => api('setUsageManual', { service: service.value, window: windowName.value, resets_at: reset.value ? new Date(reset.value).toISOString() : '', used_percent: percent.value === '' ? null : Number(percent.value), period_minutes: period.value === '' ? null : Number(period.value) }), gt('usage.saved')) }, gt('usage.save')));
 }

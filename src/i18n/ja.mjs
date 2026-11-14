@@ -208,6 +208,8 @@ export default {
   'human.invalid_profile_limit': k => `${k} は 1〜10000 の整数、または null を指定してください。`,
   'human.policy_fields_only': '指定できるのは downgrade_after_minutes だけです。',
   'human.invalid_downgrade_minutes': '降格までの時間は 1〜1440 分、または null を指定してください。',
+  'human.usage_policy_fields_only': '指定できるのは defer_writes_percent だけです。',
+  'human.invalid_usage_defer_percent': 'defer_writes_percent は 1〜100 の数値、または null を指定してください。',
   'human.need_root': 'root（いま作業しているフォルダーの絶対パス）を渡してください。',
   'human.revoked_rejoin': 'このアプリの参加は人により取り消されています。再参加にはIdleShiftの画面での許可が必要です。',
   'human.client_blocked': 'このアプリからの新規参加は拒否されています。',

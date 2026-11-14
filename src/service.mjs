@@ -243,6 +243,7 @@ export async function runService({ home = null, guiPort = 0, quiet = false, adap
     usageWindows: p => ctx.core.usageWindows(p?.service || null),
     setUsageManual: p => ctx.core.setUsageManual(p),
     removeUsage: p => ctx.core.removeUsage(p.service, p.window || null),
+    setUsagePolicy: p => ctx.core.setUsagePolicy(p),
     setTierPolicy: p => ctx.core.setTierPolicy(p.project, p.policy),
     setLanguages: p => ctx.core.setLanguages(p),
     setQuota: p => ctx.core.setQuota(p.client, p.quota, 'human'),

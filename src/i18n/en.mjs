@@ -208,6 +208,8 @@ export default {
   'human.invalid_profile_limit': k => `${k} must be an integer between 1 and 10000, or null.`,
   'human.policy_fields_only': 'Only downgrade_after_minutes can be specified.',
   'human.invalid_downgrade_minutes': 'downgrade_after_minutes must be an integer between 1 and 1440, or null.',
+  'human.usage_policy_fields_only': 'Only defer_writes_percent can be specified.',
+  'human.invalid_usage_defer_percent': 'defer_writes_percent must be a number between 1 and 100, or null.',
   'human.need_root': 'Pass root (the absolute path of your working folder).',
   'human.revoked_rejoin': 'This app has been revoked by the human. Re-allowing it in the IdleShift GUI is required to rejoin.',
   'human.client_blocked': 'New joins from this app are blocked.',

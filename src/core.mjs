@@ -635,6 +635,29 @@ export class Core extends EventEmitter {
     return { ok: true };
   }
 
+  getUsagePolicy() {
+    const raw = this.meta('usage_defer_percent');
+    if (raw == null) return { defer_writes_percent: 90 };
+    if (raw === 'off') return { defer_writes_percent: null };
+    const n = Number(raw);
+    return { defer_writes_percent: Number.isFinite(n) && n >= 1 && n <= 100 ? n : 90 };
+  }
+
+  setUsagePolicy(policy = {}) {
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy) || Object.keys(policy).some(k => k !== 'defer_writes_percent')) {
+      throw new Refusal('bad_input', this.tUi('human.usage_policy_fields_only'));
+    }
+    const raw = policy.defer_writes_percent ?? null;
+    if (raw !== null && (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 1 || raw > 100)) {
+      throw new Refusal('bad_input', this.tUi('human.invalid_usage_defer_percent'));
+    }
+    const value = raw === null ? null : Math.round(raw * 100) / 100;
+    this.meta('usage_defer_percent', value === null ? 'off' : String(value));
+    this.event('usage_policy_updated', { data: { defer_writes_percent: value } });
+    this.kick();
+    return { ok: true, defer_writes_percent: value };
+  }
+
   // These are server measurements, not a model's quota or token estimates.
   profile(projectId, label) {
     return this.one('SELECT * FROM participant_profiles WHERE project_id=? AND label=?', projectId, label) || {
@@ -700,7 +723,7 @@ export class Core extends EventEmitter {
     const { records, errors } = await collectUsage({ now: new Date(this.now()), ...options });
     const saved = this.tx(() => this.recordUsageWindows(records));
     this.lastUsageSync = { at: this.now(), saved, errors };
-    if (saved) this.emit('changed');
+    if (saved) this.kick();
     return { ok: true, saved, errors };
   }
 
@@ -738,6 +761,32 @@ export class Core extends EventEmitter {
         stale: r.fetched_at == null || now - r.fetched_at > 30 * 60_000 || rolled
       };
     }).sort((a, b) => a.service.localeCompare(b.service) || a.remaining_minutes - b.remaining_minutes);
+  }
+
+  activeServiceUsageWindows(p) {
+    const service = this.usageServiceFor(p) || p.client;
+    if (!service) return [];
+    const now = this.now();
+    return this.usageWindows(service).filter(w =>
+      !w.stale && w.used_percent != null && Date.parse(w.resets_at) > now &&
+      w.fetched_at != null && now - Date.parse(w.fetched_at) < 30 * 60_000
+    );
+  }
+
+  serviceUsageLimit(p) {
+    const hits = this.activeServiceUsageWindows(p).filter(w => w.used_percent >= 100);
+    if (!hits.length) return null;
+    return { until: Math.max(...hits.map(w => Date.parse(w.resets_at))), windows: hits.map(w => w.window) };
+  }
+
+  serviceUsageHigh(p) {
+    const { defer_writes_percent: threshold } = this.getUsagePolicy();
+    if (threshold == null) return false;
+    return this.activeServiceUsageWindows(p).some(w => w.used_percent >= threshold);
+  }
+
+  isWriteOrImplement(t) {
+    return t.mode === 'writes' || t.role === 'implement';
   }
 
   usage(args = {}, meta = {}) {
@@ -1108,10 +1157,10 @@ export class Core extends EventEmitter {
     const ex = J(t.exclude, []);
     for (const [wid, w] of this.waiters) {
       if (wid === p.id || w.project !== t.project_id) continue;
-      const q = this.one('SELECT id,label,client,conn,revoked FROM participants WHERE id=?', wid);
+      const q = this.one('SELECT id,project_id,label,client,conn,revoked FROM participants WHERE id=?', wid);
       if (!q || q.revoked || !fits(TIER_RANK[this.profile(t.project_id, q.label).tier] || 0)) continue;
       if (this.isExcluded(t, q)) continue;
-      if (this.limited(q.client) || this.usageBlock(t.project_id, q.label)) continue;
+      if (this.limited(q.client) || this.usageBlock(t.project_id, q.label) || this.serviceUsageLimit(q)) continue;
       return true;
     }
     return false;
@@ -1155,6 +1204,31 @@ export class Core extends EventEmitter {
     return false;
   }
 
+  canTakeWithoutHighUsage(t, q) {
+    if (q.revoked || this.meta(`participant_removed:${q.id}`)) return false;
+    if (this.isExcluded(t, q)) return false;
+    if (this.limited(q.client) || this.usageBlock(t.project_id, q.label) || this.serviceUsageLimit(q)) return false;
+    if (this.serviceUsageHigh(q)) return false;
+    const gate = this.tierGate(t, q);
+    if (gate === 'no') return false;
+    if (gate === 'downgrade' && !this.tierAllows(t, q)) return false;
+    return true;
+  }
+
+  usageAllows(t, p) {
+    if (!this.isWriteOrImplement(t) || !this.serviceUsageHigh(p)) return true;
+    if (t.prefer && [p.id.toLowerCase(), p.label, p.client].includes(t.prefer)) return true;
+    for (const [wid, w] of this.waiters) {
+      if (wid === p.id || w.project !== t.project_id) continue;
+      const q = this.one('SELECT * FROM participants WHERE id=?', wid);
+      if (q && this.canTakeWithoutHighUsage(t, q) && this.tierAllows(t, q)) return false;
+    }
+    const candidates = this.all("SELECT * FROM participants WHERE project_id=? AND revoked=0 AND NOT EXISTS (SELECT 1 FROM meta WHERE key='participant_removed:' || participants.id)", t.project_id);
+    const hasHealthy = candidates.some(q => q.id !== p.id && this.canTakeWithoutHighUsage(t, q));
+    if (!hasHealthy) return true;
+    return this.now() - t.opened_at >= this.t.preferGrace;
+  }
+
   eligible(t, g, p, cache) {
     const project = this.project(g.project_id);
     if (project.stopped || project.archived_at != null) return false;
@@ -1182,6 +1256,7 @@ export class Core extends EventEmitter {
     }
     if (t.branch_id && this.one('SELECT state FROM branches WHERE id=?', t.branch_id)?.state !== 'active') return false;
     if (!this.tierAllows(t, p)) return false;
+    if (!this.usageAllows(t, p)) return false;
     const b = this.budgets(g);
     if (!(g.id in cache)) cache[g.id] = this.one("SELECT COUNT(*) c FROM tasks WHERE goal_id=? AND state IN ('offered','claimed')", g.id).c;
     if (cache[g.id] >= b.max_parallel) return false;
@@ -1205,6 +1280,7 @@ export class Core extends EventEmitter {
     const probe = known ? { ...known, project_id: projectId } : { id: '\u0000', label: client || '\u0000', client: client || '\u0000', project_id: projectId };
     if (client && this.limited(client)) return 0;
     if (client && this.usageBlock(projectId, probe.label)) return 0;
+    if (client && this.serviceUsageLimit(probe)) return 0;
     const cache = {};
     let n = 0;
     for (const t of this.all("SELECT t.* FROM tasks t JOIN goals g ON g.id=t.goal_id WHERE t.project_id=? AND t.state='open' AND g.status='active'", projectId)) {
@@ -1222,10 +1298,13 @@ export class Core extends EventEmitter {
     const rows = this.all(`SELECT t.* FROM tasks t JOIN goals g ON g.id=t.goal_id WHERE t.project_id=? AND t.state='open' AND g.status='active'
       ORDER BY (t.prefer IS NOT NULL AND t.prefer IN (?,?,?)) DESC, t.created_at, t.id`, p.project_id, p.id.toLowerCase(), p.label, p.client);
     const mine = this.profile(p.project_id, p.label).tier;
-    if (mine) {
-      // After the assignee wish, work of one's own tier comes first (stable: otherwise the old order).
-      const wished = t => (t.prefer && [p.id.toLowerCase(), p.label, p.client].includes(t.prefer) ? 2 : 0) + (t.tier === mine ? 1 : 0);
-      rows.sort((a, b) => wished(b) - wished(a));
+    const highUsage = this.serviceUsageHigh(p);
+    if (mine || highUsage) {
+      // After the assignee wish, defer write/implement tasks when usage is high, and prefer one's own tier.
+      const rank = t => (t.prefer && [p.id.toLowerCase(), p.label, p.client].includes(t.prefer) ? 4 : 0)
+        + (highUsage && !this.isWriteOrImplement(t) ? 2 : 0)
+        + (mine && t.tier === mine ? 1 : 0);
+      rows.sort((a, b) => rank(b) - rank(a));
     }
     for (const t of rows) { const g = this.goal(t.goal_id); if (this.eligible(t, g, p, cache)) return { t, g }; }
     return null;
@@ -1262,15 +1341,16 @@ export class Core extends EventEmitter {
       return { kind: 'stop', task: t.id, goal: g.id, goal_status: g.status, message: this.tAi('next.stop_goal_halted', g.status), header: this.header(p, null) };
     }
     const offered = this.one("SELECT * FROM tasks WHERE state='offered' AND offered_to=? AND offer_expires>?", p.id, this.now());
-    // A human-set limit stops new offers only; work in hand (above) goes on.
+    // A human-set limit or 100% service usage stops new offers only; work in hand (above) goes on.
     const overLimit = this.usageBlock(p.project_id, p.label);
+    const svcLimit = this.serviceUsageLimit(p);
+    const appLimit = this.limited(p.client);
     if (offered) {
       // Settings may have changed since the offer was made.
-      if (!overLimit && this.tierAllows(offered, p)) return this.offerView(offered, p);
-      this.withdrawOffer(offered, overLimit ? 'usage_limit' : 'tier');
+      if (!overLimit && !svcLimit && !appLimit && this.tierAllows(offered, p)) return this.offerView(offered, p);
+      this.withdrawOffer(offered, (overLimit || svcLimit || appLimit) ? 'usage_limit' : 'tier');
     }
-    if (overLimit) return null;
-    if (this.limited(p.client)) return null;
+    if (overLimit || svcLimit || appLimit) return null;
     const pick = this.pickOffer(p);
     if (!pick) return this.idleStatus(p.project_id) === 'disband' ? { kind: 'stop', reason: 'idle_disband', message: this.tAi('next.stop_idle'), header: this.header(p, null) } : null;
     const q = this.one('SELECT * FROM quota WHERE client=?', p.client);
@@ -1304,7 +1384,8 @@ export class Core extends EventEmitter {
     const requested = Math.max(0, Math.min(86400, Number(args.wait_seconds) || 0)) * 1000;
     const hold = requested > 0 ? this.holdFor(p.client, requested) : 0;
     const usageLimit = this.usageBlock(p.project_id, p.label);
-    const limitedUntil = this.quotaView(p.client).blocked_until; // the service's own limit, as reported
+    const svcLimit = this.serviceUsageLimit(p);
+    const limitedUntil = Math.max(this.quotaView(p.client).blocked_until || 0, svcLimit?.until || 0) || null; // the service's own limit, as reported or collected
     if (hold <= 0) {
       const until = limitedUntil ?? usageLimit?.until;
       const waits = this.humanWaits(p.project_id);
@@ -1596,10 +1677,14 @@ export class Core extends EventEmitter {
         }
         // The human may have changed a limit or a tier after the offer went out.
         const overLimit = this.usageBlock(p.project_id, p.label);
-        if (overLimit || !this.tierAllows(t, p)) {
-          this.withdrawOffer(t, overLimit ? 'usage_limit' : 'tier');
-          return { refuse: overLimit
-            ? new Refusal('usage_limit', this.tAi('refusal.usage_limit', overLimit.reason), { next_tool: 'next', limited_until: new Date(overLimit.until).toISOString() })
+        const svcLimit = this.serviceUsageLimit(p);
+        const appLimitUntil = this.quotaView(p.client).blocked_until;
+        if (overLimit || svcLimit || appLimitUntil || !this.tierAllows(t, p)) {
+          const limitUntil = Math.max(overLimit?.until || 0, svcLimit?.until || 0, appLimitUntil || 0) || null;
+          this.withdrawOffer(t, limitUntil ? 'usage_limit' : 'tier');
+          const reason = overLimit ? overLimit.reason : (svcLimit ? `${this.usageServiceFor(p) || p.client} ${svcLimit.windows.join(', ')} 100%` : this.tAi('next.none_service_limit'));
+          return { refuse: limitUntil
+            ? new Refusal('usage_limit', this.tAi('refusal.usage_limit', reason), { next_tool: 'next', limited_until: new Date(limitUntil).toISOString() })
             : new Refusal('tier_mismatch', this.tAi('refusal.tier_mismatch'), { next_tool: 'next' }) };
         }
       }
@@ -2167,8 +2252,10 @@ export class Core extends EventEmitter {
           const [kind, window] = k.split('_'); const cap = u.limits[`limit_${window}_${kind}`];
           return [k, cap == null ? null : Math.max(0, cap - u.used[k])];
         }));
+        const svcLimit = this.serviceUsageLimit(p);
+        const pausedUntil = Math.max(u.blocked?.until || 0, svcLimit?.until || 0) || null;
         return { participant: p.id, label: p.label, client: p.client, state: this.participantState(p), quota: this.quotaView(p.client).state,
-          tier: u.tier, offers_paused: !!u.blocked, until: u.blocked?.until ?? null, used_5h: u.used.claims_5h,
+          tier: u.tier, offers_paused: !!(u.blocked || svcLimit), until: pausedUntil, used_5h: u.used.claims_5h,
           usage: { used: u.used, limits: u.limits, remaining, blocked: u.blocked } };
       })
     };
@@ -2422,6 +2509,7 @@ export class Core extends EventEmitter {
     return {
       now,
       settings: this.getLanguages(),
+      usage_policy: this.getUsagePolicy(),
       usage_windows: this.usageWindows(),
       projects: this.all('SELECT * FROM projects ORDER BY created_at').map(pr => {
         const usage = new Map(this.usageView(pr.id).map(u => [u.label, {
