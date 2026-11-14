@@ -1,4 +1,5 @@
 export default {
+  'usage.self_report_request': '自分の使用量を読める場合（例: Claude デスクトップの get_usage）、次の report に quota.windows [{label, used_percent, resets_at}] を添えてください。読めなければ省略してください。',
   // 共通
   'common.unknown_error': '予期しないエラーが発生しました。',
   'common.not_found': '見つかりません。',

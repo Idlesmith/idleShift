@@ -1,4 +1,5 @@
 export default {
+  'usage.self_report_request': 'If you can read your own usage (e.g. Claude desktop get_usage), include quota.windows [{label, used_percent, resets_at}] in your next report. Omit it if unavailable.',
   // Common / general
   'common.unknown_error': 'An unexpected error occurred.',
   'common.not_found': 'Not found.',

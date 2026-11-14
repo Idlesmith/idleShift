@@ -648,6 +648,37 @@ export class Core extends EventEmitter {
     return this.profile(p.project_id, p.label).usage_service || DEFAULT_USAGE_SERVICE[p.client] || null;
   }
 
+  // Only the caller's configured service can be updated by a self-report.
+  recordSelfReportedQuota(p, quota) {
+    if (!quota || typeof quota !== 'object' || Array.isArray(quota)) return;
+    const legacy = ['state', 'used_percent', 'reset_at', 'detail'].some(k => Object.hasOwn(quota, k));
+    if (legacy || !Object.hasOwn(quota, 'windows')) this.setQuota(p.client, quota, 'ai_report');
+    const service = this.usageServiceFor(p) || p.client;
+    const windows = Array.isArray(quota.windows) ? quota.windows : [];
+    const records = [...windows];
+    if (quota.used_percent != null && quota.reset_at != null) {
+      records.push({ label: 'default', used_percent: quota.used_percent, resets_at: quota.reset_at });
+    }
+    const now = this.now();
+    const valid = [];
+    for (const w of records.slice(0, 100)) {
+      if (!w || typeof w !== 'object' || typeof w.label !== 'string' ||
+          typeof w.used_percent !== 'number' || !Number.isFinite(w.used_percent) || w.used_percent < 0 || w.used_percent > 100) continue;
+      const r = normalizeRecord({ service, window: w.label, used_percent: w.used_percent, resets_at: w.resets_at,
+        source: 'self-report', fetched_at: now });
+      // Allow a small clock skew; old resets are no longer a useful measurement.
+      if (r && r.resets_at >= now - 5 * 60_000) valid.push(r);
+    }
+    this.recordUsageWindows(valid);
+  }
+
+  usageReportingHint(p) {
+    const service = this.usageServiceFor(p) || p.client;
+    const fresh = this.usageWindows(service).some(w => !w.stale && w.used_percent != null &&
+      Date.parse(w.resets_at) > this.now() && this.now() - Date.parse(w.fetched_at) < 30 * 60_000);
+    return fresh ? {} : { quota_request: this.tAi('usage.self_report_request') };
+  }
+
   // Newer snapshots replace older ones; an older snapshot never overwrites a newer one.
   recordUsageWindows(records, defaults = {}) {
     let saved = 0;
@@ -1020,10 +1051,12 @@ export class Core extends EventEmitter {
         }
         p = this.one('SELECT * FROM participants WHERE id=?', p.id);
       }
+      this.recordSelfReportedQuota(p, args.quota);
       const proj = this.project(root.project_id);
       this.kick();
       return {
         registered: true, participant: p.id, label: p.label, resumed,
+        ...this.usageReportingHint(p),
         project: { id: proj.id, name: proj.name },
         header: this.header(p, this.myTasks(p.id).length ? 'claim' : 'next'),
         your_tasks: this.myTasks(p.id).map(t => ({ task: t.id, gen: t.gen, state: t.state, title: t.title })),
@@ -1201,6 +1234,7 @@ export class Core extends EventEmitter {
       kind: 'offer', task: t.id, gen: t.gen, role: t.role, mode: t.mode, task_kind: t.kind, goal: t.goal_id,
       title: t.author_kind === 'ai' ? undefined : t.title, untrusted_ai_title: t.author_kind === 'ai' ? t.title : undefined,
       expires_in_seconds: sec,
+      ...this.usageReportingHint(p),
       note: this.tAi('offer.note', sec),
       header: this.header(p, 'claim')
     };
@@ -1235,6 +1269,13 @@ export class Core extends EventEmitter {
   }
 
   async next(args = {}, meta = {}) {
+    const out = await this.nextResponse(args, meta);
+    if (out.kind === 'stop' || out.kind === 'superseded') return out;
+    const p = this.one('SELECT * FROM participants WHERE id=?', args.participant);
+    return { ...out, ...this.usageReportingHint(p) };
+  }
+
+  async nextResponse(args = {}, meta = {}) {
     let p;
     try { p = this.touch(args.participant, meta); }
     catch (error) {
@@ -1650,6 +1691,7 @@ export class Core extends EventEmitter {
             this.tAi('assignment.enforced_budget', Math.max(0, b.max_assignments - g.assignments_used), b.max_parallel, b.max_branches),
             this.tAi('assignment.enforced_authority')
           ],
+          ...this.usageReportingHint(p),
           requested_of_you: {
             note: this.tAi('assignment.delegation_note'),
             research: d.research, write_files: d.write_files, run_code: d.run_code, install_deps: d.install_deps, prototype: d.prototype,
@@ -1706,7 +1748,6 @@ export class Core extends EventEmitter {
       const body = clip(String(args.body || ''), 20000);
       const stopped = !!this.project(p.project_id).stopped || goalHalted(g);
       const halt = stopped ? { stop: true, stop_work: true, goal_status: g.status, note: '全体または担当ゴールが停止・一時停止・完了済みです。このタスクの作業を止めてください。' } : {};
-      if (args.quota && typeof args.quota === 'object') this.setQuota(p.client, args.quota, 'ai_report');
       const dup = this.one('SELECT * FROM reports WHERE task_id=? AND gen=? AND participant=? AND report_id=?', t.id, gen, p.id, reportId);
       if (dup) return { accepted: !dup.stale, duplicate: true, outcome: dup.outcome, ...halt, header: this.header(p, 'next') };
       const current = t.assignee === p.id && gen === t.gen && (t.state === 'claimed' || t.state === 'needs_check');
@@ -1717,6 +1758,7 @@ export class Core extends EventEmitter {
         this.kick();
         return { accepted: false, stop_work: true, reason: 'このタスクの担当はすでにあなたではありません（担当交代・期限切れ・世代違い）。報告は遅延結果として保存しましたが、状態は変えていません。このタスクの作業を止め、next を呼んでください。', header: this.header(p, 'next') };
       }
+      this.recordSelfReportedQuota(p, args.quota);
       const b = this.budgets(g);
       let outcome = kind;
       const save = () => {
@@ -1803,7 +1845,7 @@ export class Core extends EventEmitter {
       }
 
       // kind === 'limit': the assignee itself says it is out of quota, so there is no silent writer left behind.
-      if (!args.quota) this.setQuota(p.client, { state: 'limit', reset_at: args.reset_at, detail: clip(body, 120) }, 'ai_report');
+      if (!args.quota || (Array.isArray(args.quota.windows) && !args.quota.state)) this.setQuota(p.client, { state: 'limit', reset_at: args.reset_at, detail: clip(body, 120) }, 'ai_report');
       save();
       this.run('UPDATE tasks SET prefer=?, handoff=? WHERE id=?', p.id.toLowerCase(), clip(`${t.handoff ? t.handoff + '\n' : ''}[上限で中断 ${p.id}] ${clip(body, 800)}${t.mode === 'writes' ? '\n[引継ぎ注意] 途中まで書き込んだ可能性があります。最初に変更の痕跡を確認してください。' : ''}`, 4000), t.id);
       this.releaseTask(t, 'open', 'limit');

@@ -5,11 +5,21 @@ import { Refusal } from './core.mjs';
 const s = (description, extra = {}) => ({ type: 'string', description, ...extra });
 const n = description => ({ type: 'number', description });
 
+const quota = {
+  type: 'object',
+  description: 'Optional: your own usage limits, if readable. Prefer windows for multiple limits; legacy state/used_percent/reset_at/detail are also accepted. Omit if unavailable.',
+  properties: {
+    state: s('ok|low|limit|unknown'), used_percent: n('0-100 if known'), reset_at: s('ISO time if known'), detail: s('Short note'),
+    windows: { type: 'array', description: 'Measured usage windows for your service (stored as self-report). Use stable labels such as 5h, weekly, weekly-sonnet.',
+      items: { type: 'object', properties: { label: s('Stable window label, e.g. 5h or weekly-sonnet'), used_percent: n('Measured percentage, 0-100'), resets_at: s('ISO reset time') }, required: ['label', 'used_percent', 'resets_at'] } }
+  }
+};
+
 export const TOOLS = [
   {
     name: 'join',
-    description: 'Join the IdleShift project that owns your current working folder. Call this only when the user asked you to work with IdleShift. Returns your participant id and any task you already hold (use it again after losing context). If the folder is not registered it says so and returns nothing else.',
-    inputSchema: { type: 'object', properties: { root: s('Absolute path of the folder you are working in'), label: s('Leave empty. Only set it when the user gave this conversation a name (it must stay the same on every later join).') }, required: ['root'] }
+    description: 'Join the IdleShift project that owns your current working folder. Call this only when the user asked you to work with IdleShift. Returns your participant id and any task you already hold (use it again after losing context). If the folder is not registered it says so and returns nothing else. If readable, you may include your own measured usage in quota.windows; omit when unavailable.',
+    inputSchema: { type: 'object', properties: { root: s('Absolute path of the folder you are working in'), label: s('Leave empty. Only set it when the user gave this conversation a name (it must stay the same on every later join).'), quota }, required: ['root'] }
   },
   {
     name: 'next',
@@ -28,7 +38,7 @@ export const TOOLS = [
   },
   {
     name: 'report',
-    description: 'Report on a task you hold. kind: "progress" (extends your lease), "result" (finished), "decline" (cannot do it), "blocked" or "decision_needed" (a human must answer; put the question in body), "limit" (you hit a usage limit; add reset_at if known). If claim gave you a git_worktree workspace, commit your changes inside workspace.path before calling kind="result" (never touch the main folder, other branches, or push). Re-send with the same report_id if unsure it arrived. Keep long material in files and report paths plus key points.',
+    description: 'Report on a task you hold. kind: "progress" (extends your lease), "result" (finished), "decline" (cannot do it), "blocked" or "decision_needed" (a human must answer; put the question in body), "limit" (you hit a usage limit; add reset_at if known). If claim gave you a git_worktree workspace, commit your changes inside workspace.path before calling kind="result" (never touch the main folder, other branches, or push). Re-send with the same report_id if unsure it arrived. Keep long material in files and report paths plus key points. When asked for quota, include measured usage in quota.windows [{label, used_percent, resets_at}] if readable; omit if unavailable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -39,7 +49,7 @@ export const TOOLS = [
         verdict: s('For review tasks', { enum: ['accept', 'rework'] }),
         options: { type: 'array', items: { type: 'string' }, description: 'Answer choices for blocked/decision_needed' },
         reset_at: s('For kind=limit: when the limit resets (ISO time), if known'),
-        quota: { type: 'object', description: 'Optional: what you know about your own usage limit', properties: { state: s('ok|low|limit|unknown'), used_percent: n('0-100 if known'), reset_at: s('ISO time if known'), detail: s('Short note') } }
+        quota
       },
       required: ['participant', 'task', 'gen', 'report_id', 'kind']
     }

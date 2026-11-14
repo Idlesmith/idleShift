@@ -326,7 +326,8 @@ test('held wait: delivered when work appears, superseded by a newer wait, short 
   const b = joinAs(core, root, 'b', 'c2');
   const f = await take(core, a);
   const t0 = await core.next({ participant: b, wait_seconds: 30 });
-  assert.deepEqual(Object.keys(t0).sort(), ['again', 'header', 'kind'], 'a timed-out wait answers with almost nothing');
+  assert.deepEqual(Object.keys(t0).sort(), ['again', 'header', 'kind', 'quota_request'], 'a timed-out wait only adds the usage request when needed');
+  assert.match(t0.quota_request, /quota.windows/);
   const w1 = core.next({ participant: b, wait_seconds: 30 });
   const w2 = core.next({ participant: b, wait_seconds: 30 });
   assert.equal((await w1).kind, 'superseded');
