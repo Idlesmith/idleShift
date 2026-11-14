@@ -443,6 +443,7 @@ function viewConnect() {
         h('td', {}, badge(gt('quota.' + c.quota.state), c.quota.state === 'limit_reported' ? 'bad' : ''), c.quota.blocked_until ? h('div', { class: 'small muted' }, gt('clients.blocked_until', fmt(c.quota.blocked_until))) : null),
         h('td', {}, h('button', { onclick: () => quotaDialog(c.client, c.quota) }, gt('clients.set_quota_btn')))))) : h('div', { class: 'muted' }, gt('clients.none'))));
 
+  out.push(usageWindowsPanel());
   for (const p of activeProjects()) {
     const a = p.adapters || {};
     const boxes = Object.entries(S.adapters.available).map(([k, name]) => {
@@ -477,15 +478,33 @@ const USAGE_LIMIT_KEYS = ['limit_5h_claims', 'limit_5h_minutes', 'limit_7d_claim
 function profileDialog(project, participant) {
   const tier = h('select', { 'aria-label': gt('tier.dialog_aria') }, h('option', { value: '' }, gt('tier.unset')), TIER_KEYS.map(key => h('option', { value: key }, gt('tier.' + key))));
   tier.value = participant.tier || '';
+  const service = h('input', { type: 'text', value: participant.usage_service_override || '', placeholder: participant.usage_service || gt('usage.auto') });
   const limits = Object.fromEntries(USAGE_LIMIT_KEYS.map(key => [key, h('input', { type: 'number', min: 1, max: 10000, step: 1, placeholder: gt('tier.no_limit'), 'aria-label': gt('tier.' + key), value: participant.usage?.limits[key] ?? '' })]));
   dialog(gt('tier.dialog_title', participant.label), h('div', {},
     h('p', { class: 'small muted' }, gt('tier.dialog_hint1')),
-    field(gt('tier.field'), tier), h('div', { class: 'grid2' }, USAGE_LIMIT_KEYS.map(key => h('div', {}, field(gt('tier.' + key), limits[key])))),
+    field(gt('tier.field'), tier), field(gt('usage.service_mapping'), service), h('div', { class: 'grid2' }, USAGE_LIMIT_KEYS.map(key => h('div', {}, field(gt('tier.' + key), limits[key])))),
     h('p', { class: 'small muted' }, gt('tier.dialog_hint2'))),
     [h('button', { class: 'primary', onclick: async () => {
       const values = Object.fromEntries(Object.entries(limits).map(([key, input]) => [key, input.value === '' ? null : Number(input.value)]));
-      if (await act(() => api('setProfile', { project: project.id, label: participant.label, profile: { tier: tier.value || null, ...values } }), gt('tier.saved'))) closeDialog();
+      if (await act(() => api('setProfile', { project: project.id, label: participant.label, profile: { tier: tier.value || null, usage_service: service.value.trim() || null, ...values } }), gt('tier.saved'))) closeDialog();
     } }, gt('tier.save_btn'))]);
+}
+
+function usageWindowsPanel() {
+  const service = h('input', { type: 'text', placeholder: 'codex', 'aria-label': gt('usage.service') });
+  const windowName = h('input', { type: 'text', placeholder: '5h', 'aria-label': gt('usage.window') });
+  const reset = h('input', { type: 'datetime-local', 'aria-label': gt('usage.reset') });
+  const percent = h('input', { type: 'number', min: 0, max: 100, step: 'any', 'aria-label': gt('usage.percent') });
+  const period = h('input', { type: 'number', min: 1, step: 1, 'aria-label': gt('usage.period') });
+  const rows = [...(S.usage_windows || [])].sort((a, b) => a.remaining_minutes - b.remaining_minutes);
+  const labels = serviceName => S.projects.flatMap(p => p.participants.filter(x => x.usage_service === serviceName).map(x => `${p.name}: ${x.label}`)).join(', ');
+  return h('div', { class: 'card' }, h('h2', {}, gt('usage.title')),
+    h('button', { onclick: async () => { const result = await act(() => api('syncUsage')); if (result) toast(gt('usage.synced', result.saved, result.errors.length)); } }, gt('usage.sync')),
+    rows.length ? h('div', { class: 'list' }, rows.map(r => h('div', { class: r.stale ? 'small muted' : 'small' },
+      `${r.service} / ${r.window} — ${r.used_percent == null ? '—' : r.used_percent + '%'} — ${gt('usage.remaining', r.remaining_minutes)} — ${fmt(r.resets_at)} — ${r.source} — ${r.fetched_at ? fmt(r.fetched_at) : '—'}${r.stale ? ' (' + gt('usage.stale') + ')' : ''}`,
+      labels(r.service) ? h('div', {}, labels(r.service)) : null))) : h('p', { class: 'muted' }, gt('usage.empty')),
+    h('h3', {}, gt('usage.manual')), h('div', { class: 'grid2' }, field(gt('usage.service'), service), field(gt('usage.window'), windowName), field(gt('usage.reset'), reset), field(gt('usage.percent'), percent), field(gt('usage.period'), period)),
+    h('button', { onclick: () => act(() => api('setUsageManual', { service: service.value, window: windowName.value, resets_at: reset.value ? new Date(reset.value).toISOString() : '', used_percent: percent.value === '' ? null : Number(percent.value), period_minutes: period.value === '' ? null : Number(period.value) }), gt('usage.saved')) }, gt('usage.save')));
 }
 
 function usageSummary(participant) {

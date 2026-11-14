@@ -109,3 +109,28 @@ test('normalizeRecord accepts epoch seconds and ISO strings', () => {
   assert.equal(normalizeRecord({ service: 'a', window: 'w', resets_at: 1_800_000_000 }).resets_at, 1_800_000_000_000);
   assert.equal(normalizeRecord({ service: 'a', window: 'w', resetAt: '2026-11-14T10:00:00Z' }).resets_at, T0);
 });
+
+import { joinAs } from './helpers.mjs';
+import { callTool, TOOLS } from '../src/tools.mjs';
+
+test('usage MCP shows own project with caller first and mapped service windows', async t => {
+  const core = mk();
+  const root = tmp(t), otherRoot = tmp(t);
+  const project = core.createProject({ name: 'one' }).id, other = core.createProject({ name: 'other' }).id;
+  core.addRoot(project, root); core.addRoot(other, otherRoot);
+  const a = joinAs(core, root, 'first', 'c1'), b = joinAs(core, root, 'second', 'c2'), foreign = joinAs(core, otherRoot, 'foreign', 'c3');
+  core.setProfile(project, 'first', { usage_service: 'codex' });
+  core.setProfile(project, 'second', { usage_service: 'codex' });
+  core.setProfile(other, 'foreign', { usage_service: 'codex' });
+  core.recordUsageWindows([rec()]);
+  const { result } = await callTool(core, 'usage', { participant: b }, { conn: 'c2' });
+  assert.deepEqual(result.participants.map(p => p.participant), [b, a]);
+  assert.ok(!result.participants.some(p => p.participant === foreign));
+  assert.deepEqual(result.participants[0].windows[0], core.usageWindows('codex')[0]);
+  assert.equal(result.participants[0].windows[0].stale, false);
+  assert.deepEqual(TOOLS.find(x => x.name === 'usage').inputSchema.required, ['participant']);
+  const snap = core.snapshot();
+  assert.equal(snap.usage_windows[0].service, 'codex');
+  assert.equal(snap.projects.find(p => p.id === project).participants.find(p => p.id === b).usage_service_override, 'codex');
+  assert.equal((await callTool(core, 'usage', { participant: b }, { conn: 'c1' })).refusal.code, 'not_yours');
+});
