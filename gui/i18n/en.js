@@ -418,6 +418,8 @@ window.GUI_I18N.en = {
   'usage.service_mapping': 'Participant service (blank: automatic)',
   'usage.auto': 'Automatic',
   'usage.remaining': a => `remaining: ${a} min`,
+  'usage.resets_in': a => `resets in ${a}`,
+  'usage.unit_d': 'd', 'usage.unit_h': 'h', 'usage.unit_m': 'm',
   'usage.stale': 'stale',
   'usage.defer_writes': 'Defer write / implement tasks at (%)',
   'usage.defer_hint': 'Leave blank to disable',

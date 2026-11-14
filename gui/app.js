@@ -224,9 +224,38 @@ function archivedCard(p) {
     h('div', { class: 'list' }, p.goals.length ? p.goals.map(g => h('div', {}, h('button', { class: 'link', onclick: () => { openGoal = g.id; goalData = null; render(); loadGoal(); } }, `${g.id}  ${g.title}`), ' ', badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]))) : h('div', { class: 'muted' }, gt('project.no_goals'))));
 }
 
+// ---- usage rings (home) ----
+const fmtLeft = min => min >= 1440 ? `${Math.floor(min / 1440)}${gt('usage.unit_d')} ${Math.floor((min % 1440) / 60)}${gt('usage.unit_h')}` : min >= 60 ? `${Math.floor(min / 60)}${gt('usage.unit_h')} ${min % 60}${gt('usage.unit_m')}` : `${min}${gt('usage.unit_m')}`;
+function usageRing(w) {
+  const known = w.used_percent != null;
+  const pct = known ? Math.max(0, Math.min(100, Math.round(w.used_percent))) : 0;
+  const level = !known ? 'unknown' : pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : 'ok';
+  // Inline style attributes are blocked by the page CSP, so set the custom property through CSSOM.
+  const dial = h('div', { class: 'uring-dial' }, h('span', {}, known ? `${pct}%` : '?'));
+  dial.style.setProperty('--p', String(pct));
+  return h('div', { class: `uring ${level}${w.stale ? ' stale' : ''}`, title: `${w.service} / ${w.window}
+${gt('usage.reset')}: ${fmt(w.resets_at)}
+${w.source}${w.fetched_at ? ' · ' + fmt(w.fetched_at) : ''}${w.stale ? ' · ' + gt('usage.stale') : ''}` },
+    dial,
+    h('div', { class: 'uring-name' }, w.window),
+    h('div', { class: 'uring-left small muted' }, gt('usage.resets_in', fmtLeft(w.remaining_minutes))));
+}
+function usageHomeCard() {
+  const rows = S.usage_windows || [];
+  const services = [...new Set(rows.map(r => r.service))];
+  return h('div', { class: 'card' },
+    h('div', { class: 'row spread' }, h('h2', {}, gt('usage.title')),
+      h('button', { onclick: async () => { const r = await act(() => api('syncUsage')); if (r) toast(gt('usage.synced', r.saved, r.errors.length)); } }, gt('usage.sync'))),
+    rows.length ? h('div', { class: 'usvc-list' }, services.map(svc => h('div', { class: 'usvc' },
+      h('div', { class: 'usvc-name' }, svc),
+      h('div', { class: 'uring-row' }, rows.filter(r => r.service === svc).sort((a, b) => a.remaining_minutes - b.remaining_minutes).map(usageRing)))))
+      : h('p', { class: 'muted' }, gt('usage.empty')));
+}
+
 // ---- home ----
 function viewHome() {
   const out = [];
+  if ((S.usage_windows || []).length || S.projects.length) out.push(usageHomeCard());
   const nArch = S.projects.filter(p => p.archived).length;
   if (nArch) out.push(h('label', { class: 'check small muted' }, h('input', { type: 'checkbox', checked: showArchived, onchange: e => { showArchived = e.target.checked; render(); } }), gt('home.show_archived', nArch)));
   if (!S.projects.length) out.push(h('div', { class: 'card' }, h('h2', {}, gt('home.welcome_title')), h('p', {}, gt('home.welcome_body'))));

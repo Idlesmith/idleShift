@@ -419,6 +419,8 @@ window.GUI_I18N.ja = {
   'usage.auto': '自動',
   'usage.remaining': a => `残り ${a} 分`,
   'usage.stale': '古い値',
+  'usage.resets_in': a => `あと ${a}`,
+  'usage.unit_d': '日', 'usage.unit_h': '時間', 'usage.unit_m': '分',
   'usage.defer_writes': 'writes / implement の後回ししきい値 (%)',
   'usage.defer_hint': '空欄で無効化',
   'usage.policy_saved': '使用率ルーティング設定を保存しました',
