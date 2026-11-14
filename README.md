@@ -24,7 +24,7 @@ Things other tools also do (so we do not claim them as unique): a shared MCP tas
 | Platform | **Windows only** (tested on Windows 11). Mac/Linux not supported yet. |
 | Runtime | Node.js 22.13 or later (built-in `node:sqlite`). CI uses Node 24. **No npm dependencies.** |
 | AI apps confirmed to work | Claude Code (CLI and the Code tab of Claude Desktop), Codex CLI, Antigravity. Claude Desktop **chat** is not verified. |
-| Tests | 215 passing (`npm test`, 2026-11-13). |
+| Tests | 231 passing (`npm test`, 2026-11-14). |
 | Per-task git worktrees | Core implemented (not released); the merge/discard screen is not done yet. |
 | Low usage while waiting | Idle agents cost almost nothing: in our test, three AIs waiting for an hour used 0–2% of a 5-hour quota (Plus/Pro plans, measured once on 2026-11-13; [details](docs/evidence/raw/idle-cost/2026-11-13/README.md)). |
 
@@ -68,6 +68,8 @@ AI apps (Claude Code / Codex / Antigravity)         You
 - Seven MCP tools: `join`, `next`, `claim`, `get`, `report`, `plan`, `status`. Standard MCP only.
 - Tasks move `open → offered → claimed → reported → accepted`. Generations stop stale reports; `report_id` stops duplicates. A write task whose AI disappears goes to a human check, not silently to another AI.
 - Text written by one AI reaches another as `untrusted_ai_*` data, not as instructions.
+- **Waiting on you is visible.** When the only things left are human actions (a merge, a decision, confirming a goal), the GUI and an OS notification say what is waiting, with the task/decision/goal IDs. A waiting AI gets the same list from `next` (`none` with `reason` and `waiting_on`).
+- **When the work runs out:** once all goals are finished, one AI (a `planner` if there is one) is asked a single time to propose up to three next goals. They are created as *proposed*: nothing starts and no permission widens until you approve one in the GUI (or reject it). If there is still nothing to do after that, waiting AIs receive `stop` and end; after you approve a goal, paste the start phrase again.
 - More detail: [docs/self-study/01-technical-audit.md](docs/self-study/01-technical-audit.md).
 
 ## Security and known limitations
