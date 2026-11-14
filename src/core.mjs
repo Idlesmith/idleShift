@@ -740,6 +740,16 @@ export class Core extends EventEmitter {
     }).sort((a, b) => a.service.localeCompare(b.service) || a.remaining_minutes - b.remaining_minutes);
   }
 
+  usage(args = {}, meta = {}) {
+    const caller = this.touch(args.participant, meta);
+    const participants = this.all("SELECT * FROM participants WHERE project_id=? AND revoked=0 AND NOT EXISTS (SELECT 1 FROM meta WHERE key='participant_removed:' || participants.id) ORDER BY joined_at", caller.project_id);
+    participants.sort((a, b) => Number(b.id === caller.id) - Number(a.id === caller.id));
+    return { participants: participants.map(p => {
+      const service = this.usageServiceFor(p);
+      return { participant: p.id, label: p.label, service, windows: service ? this.usageWindows(service) : [] };
+    }) };
+  }
+
   recordClaimUsage(t, p) {
     this.run('INSERT OR IGNORE INTO usage_log(project_id,label,participant,task_id,gen,claimed_at) VALUES(?,?,?,?,?,?)', p.project_id, p.label, p.id, t.id, t.gen, this.now());
   }
@@ -2412,6 +2422,7 @@ export class Core extends EventEmitter {
     return {
       now,
       settings: this.getLanguages(),
+      usage_windows: this.usageWindows(),
       projects: this.all('SELECT * FROM projects ORDER BY created_at').map(pr => {
         const usage = new Map(this.usageView(pr.id).map(u => [u.label, {
           ...u, remaining: Object.fromEntries(['claims_5h', 'minutes_5h', 'claims_7d', 'minutes_7d'].map(k => {
@@ -2437,7 +2448,7 @@ export class Core extends EventEmitter {
         blocked_clients: this.all("SELECT substr(key, ?) client FROM meta WHERE key LIKE ?", `client_join_block:${pr.id}:`.length + 1, `client_join_block:${pr.id}:%`).map(x => x.client),
         participants: this.all("SELECT * FROM participants WHERE project_id=? AND NOT EXISTS (SELECT 1 FROM meta WHERE key='participant_removed:' || participants.id) ORDER BY joined_at", pr.id).map(p => ({
           id: p.id, label: p.label, client: p.client, client_version: p.client_version, revoked: !!p.revoked, state: this.participantState(p), last_seen: p.last_seen, cycles: p.cycles,
-          tier: usage.get(p.label)?.tier ?? null, usage: usage.get(p.label),
+          tier: usage.get(p.label)?.tier ?? null, usage: usage.get(p.label), usage_service: this.usageServiceFor(p), usage_service_override: this.profile(pr.id, p.label).usage_service,
           waiting_since: this.waiters.get(p.id)?.since ?? null, hold_ms: this.waiters.get(p.id)?.hold ?? null,
           tasks: this.myTasks(p.id).map(t => ({ id: t.id, state: t.state, title: t.title }))
         })),

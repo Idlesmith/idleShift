@@ -1,4 +1,4 @@
-// The MCP surface: seven tools, standard JSON only, no optional MCP features
+// The MCP surface: standard tools, standard JSON only, no optional MCP features
 // required (no sampling, no server-initiated messages).
 import { Refusal } from './core.mjs';
 
@@ -65,6 +65,11 @@ export const TOOLS = [
       },
       required: ['participant', 'ops']
     }
+  },
+  {
+    name: 'usage',
+    description: 'Read AI service usage for participants in your project (your own entry first): each window includes used_percent (null if unknown or reset), resets_at, remaining_minutes, source, fetched_at and stale. Call it before taking heavy work.',
+    inputSchema: { type: 'object', properties: { participant: s('Your participant id') }, required: ['participant'] }
   },
   {
     name: 'status',
