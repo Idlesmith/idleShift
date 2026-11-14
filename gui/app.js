@@ -99,7 +99,7 @@ async function copy(text) { try { await navigator.clipboard.writeText(text); toa
 const fmt = ts => (ts ? new Date(ts).toLocaleString(uiLang() === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const ago = ts => { if (!ts) return ''; const s = Math.max(0, Math.round((Date.now() - ts) / 1000)); return s < 90 ? gt('time.sec_ago', s) : s < 5400 ? gt('time.min_ago', Math.round(s / 60)) : s < 172800 ? gt('time.hr_ago', Math.round(s / 3600)) : gt('time.day_ago', Math.round(s / 86400)); };
 
-const GOAL_STATUS_CLS = { active: 'ok', paused: 'warn', waiting_decision: 'warn', done_candidate: 'warn', done: 'ok', stopped: 'bad' };
+const GOAL_STATUS_CLS = { active: 'ok', paused: 'warn', waiting_decision: 'warn', done_candidate: 'warn', done: 'ok', stopped: 'bad', proposed: 'warn' };
 const P_STATE_CLS = { waiting: 'ok', working: 'ok', active: 'ok', needs_resume: 'warn', no_response: 'bad', idle: '', revoked: 'bad' };
 const DELEG_KEYS = ['research', 'write_files', 'run_code', 'install_deps', 'prototype'];
 const KNOWN_ANSWERS = new Set(['extend', 'stop', 'continue', 'confirm', 'reject', 'retry', 'cancel', 'cancel_task', 'resume', 'allow_more']);
@@ -341,6 +341,7 @@ function viewGoal() {
     h('div', { class: 'card' },
       h('div', { class: 'row spread' }, h('h2', {}, `${g.id}  ${g.title}  `, badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]), g.author_kind === 'ai' ? badge(gt('task.author_ai', g.author), 'warn') : null),
         h('div', { class: 'row' },
+          g.status === 'proposed' ? [h('button', { class: 'primary', onclick: () => act(() => api('approveProposedGoal', { goal: g.id }), gt('goal_view.approved_toast')) }, gt('goal_view.approve_btn')), h('button', { onclick: async () => { if (await act(() => api('rejectProposedGoal', { goal: g.id }), gt('goal_view.rejected_toast'))) { openGoal = null; goalData = null; render(); } } }, gt('goal_view.reject_btn'))] : null,
           g.status === 'active' ? h('button', { onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'paused' }), gt('goal_view.paused_toast')) }, gt('goal_view.pause_btn')) : null,
           ['paused', 'stopped'].includes(g.status) ? h('button', { class: 'primary', onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'active' }), gt('goal_view.resumed_toast')) }, gt('goal_view.resume_btn')) : null,
           !['stopped', 'done'].includes(g.status) ? h('button', { onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'stopped' }), gt('goal_view.stopped_toast')) }, gt('goal_view.stop_btn')) : null,

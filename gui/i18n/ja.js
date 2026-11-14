@@ -33,6 +33,11 @@ window.GUI_I18N.ja = {
   'goal_status.done_candidate': '完了候補（確認待ち）',
   'goal_status.done': '完了',
   'goal_status.stopped': '停止',
+  'goal_status.proposed': '提案中（承認待ち）',
+  'goal_view.approve_btn': '承認して開始',
+  'goal_view.reject_btn': '提案を却下',
+  'goal_view.approved_toast': 'ゴールを承認しました',
+  'goal_view.rejected_toast': '提案を破棄しました',
 
   'task_state.open': '未着手',
   'task_state.offered': '提示中',

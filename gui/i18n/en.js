@@ -33,6 +33,11 @@ window.GUI_I18N.en = {
   'goal_status.done_candidate': 'Done Candidate (Pending Review)',
   'goal_status.done': 'Done',
   'goal_status.stopped': 'Stopped',
+  'goal_status.proposed': 'Proposed (awaiting approval)',
+  'goal_view.approve_btn': 'Approve and start',
+  'goal_view.reject_btn': 'Reject proposal',
+  'goal_view.approved_toast': 'Goal approved',
+  'goal_view.rejected_toast': 'Proposal discarded',
 
   'task_state.open': 'Open',
   'task_state.offered': 'Offered',

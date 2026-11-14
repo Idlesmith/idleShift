@@ -228,6 +228,8 @@ export async function runService({ home = null, guiPort = 0, quiet = false, adap
     createGoal: p => ctx.core.createGoal(p.project, p.goal),
     updateGoal: p => ctx.core.updateGoal(p.goal, p.patch),
     setGoalStatus: p => ctx.core.setGoalStatus(p.goal, p.status),
+    approveProposedGoal: p => ctx.core.approveProposedGoal(p.goal),
+    rejectProposedGoal: p => ctx.core.rejectProposedGoal(p.goal),
     setProjectStop: p => ctx.core.setProjectStop(p.project, !!p.stopped),
     addHumanTask: p => ctx.core.addHumanTask(p.goal, p.task),
     addHumanNote: p => ctx.core.addHumanNote(p.goal, p.text),
