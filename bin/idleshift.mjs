@@ -122,6 +122,34 @@ if (cmd === 'mcp') {
   for (let i = 0; i < 50 && readService(home); i++) await new Promise(res => setTimeout(res, 100));
   console.log(r?.ok && !readService(home) ? t(cliLang, 'cli.stopped') : t(cliLang, 'cli.stop_failed'));
   process.exit(0);
+} else if (cmd === 'usage') {
+  const sub = process.argv[3] || 'list';
+  const s = await ensureRunning();
+  const call = async (method, params = {}) => {
+    const r = await fetch(`http://127.0.0.1:${s.port}/api/call`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-idleshift-token': s.token }, body: JSON.stringify({ method, params }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false || j.error) { console.error(j.message || j.error || r.statusText); process.exit(1); }
+    return j.result ?? j;
+  };
+  const opt = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
+  if (sub === 'sync') {
+    const r = await call('syncUsage');
+    console.log(t(cliLang, 'cli.usage_synced', r.saved, r.errors.length));
+    for (const e of r.errors) console.error(`  ${e.collector}: ${e.error}`);
+  } else if (sub === 'list') {
+    const rows = await call('usageWindows');
+    if (process.argv.includes('--json')) console.log(JSON.stringify(rows, null, 2));
+    else for (const r of rows) console.log([r.service, r.window, r.used_percent == null ? '-' : `${Math.round(r.used_percent)}%`, `${r.remaining_minutes}m`, new Date(r.resets_at).toLocaleString(), r.source, r.stale ? 'stale' : ''].join('\t'));
+  } else if (sub === 'set') {
+    const [service, window, resetsAt] = process.argv.slice(4).filter(a => !a.startsWith('--') && a !== opt('--used') && a !== opt('--period'));
+    const used = opt('--used'), period = opt('--period');
+    await call('setUsageManual', { service, window, resets_at: /^\d+$/.test(resetsAt || '') ? Number(resetsAt) : resetsAt, used_percent: used === undefined ? null : Number(used), period_minutes: period === undefined ? null : Number(period) });
+    console.log('ok');
+  } else if (sub === 'rm') {
+    await call('removeUsage', { service: process.argv[4], window: process.argv[5] });
+    console.log('ok');
+  } else { console.log(t(cliLang, 'cli.usage_help')); }
+  process.exit(0);
 } else if (cmd === 'hosts') {
   const { hostStatus } = await import('../src/hosts.mjs');
   for (const h of hostStatus(process.env, cliLang)) console.log(t(cliLang, 'cli.host_line', h.key, h.detected ? t(cliLang, 'cli.yes') : t(cliLang, 'cli.no'), h.registered ? (h.up_to_date ? t(cliLang, 'cli.reg_ok') : t(cliLang, 'cli.reg_outdated')) : t(cliLang, 'cli.reg_none'), h.file));

@@ -12,6 +12,7 @@ import path from 'node:path';
 import { normalizeRoot, isInside, dataHome, worktreesDir, worktreePath } from './paths.mjs';
 import { detectRepo, branchExists, createWorktree, worktreeStatus, diffStats, removeWorktree, checkMergeConflict, executeMerge, pruneRepoWorktrees, hasGitIdentity } from './git.mjs';
 import { t, resolveUiLanguage, resolveAiLanguage } from './i18n/index.mjs';
+import { collectUsage, normalizeRecord, nextResetMs, DEFAULT_USAGE_SERVICE } from './usage/index.mjs';
 
 export class Refusal extends Error {
   constructor(code, message, extra = {}) {
@@ -609,13 +610,14 @@ export class Core extends EventEmitter {
     const name = cleanName(label, null);
     if (!name || name !== label) throw new Refusal('bad_input', this.tUi('human.need_participant_label'));
     const fields = ['limit_5h_claims', 'limit_5h_minutes', 'limit_7d_claims', 'limit_7d_minutes'];
-    if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k => !['tier', ...fields].includes(k))) throw new Refusal('bad_input', this.tUi('human.profile_fields_only'));
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k => !['tier', 'usage_service', ...fields].includes(k))) throw new Refusal('bad_input', this.tUi('human.profile_fields_only'));
     if (Object.hasOwn(patch, 'tier') && ![null, 'planner', 'senior', 'worker'].includes(patch.tier)) throw new Refusal('bad_input', this.tUi('human.invalid_profile_tier'));
+    if (Object.hasOwn(patch, 'usage_service') && patch.usage_service !== null && !/^[\w.:@+-]{1,80}$/.test(String(patch.usage_service))) throw new Refusal('bad_input', this.tUi('human.invalid_usage_service'));
     for (const k of fields) if (Object.hasOwn(patch, k) && patch[k] !== null && (!Number.isInteger(patch[k]) || patch[k] < 1 || patch[k] > 10000)) throw new Refusal('bad_input', this.tUi('human.invalid_profile_limit', k));
     const next = { ...this.profile(projectId, name), ...patch };
     return this.tx(() => {
-      this.run(`INSERT INTO participant_profiles(project_id,label,tier,${fields.join(',')},updated_at) VALUES(?,?,?,?,?,?,?,?)
-        ON CONFLICT(project_id,label) DO UPDATE SET tier=excluded.tier, ${fields.map(k => `${k}=excluded.${k}`).join(',')}, updated_at=excluded.updated_at`, projectId, name, next.tier, ...fields.map(k => next[k]), this.now());
+      this.run(`INSERT INTO participant_profiles(project_id,label,tier,usage_service,${fields.join(',')},updated_at) VALUES(?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(project_id,label) DO UPDATE SET tier=excluded.tier, usage_service=excluded.usage_service, ${fields.map(k => `${k}=excluded.${k}`).join(',')}, updated_at=excluded.updated_at`, projectId, name, next.tier, next.usage_service ?? null, ...fields.map(k => next[k]), this.now());
       this.event('profile_updated', { project: projectId, data: { label: name, fields: Object.keys(patch) } });
       this.kick();
       return { ok: true };
@@ -636,9 +638,75 @@ export class Core extends EventEmitter {
   // These are server measurements, not a model's quota or token estimates.
   profile(projectId, label) {
     return this.one('SELECT * FROM participant_profiles WHERE project_id=? AND label=?', projectId, label) || {
-      project_id: projectId, label, tier: null,
+      project_id: projectId, label, tier: null, usage_service: null,
       limit_5h_claims: null, limit_5h_minutes: null, limit_7d_claims: null, limit_7d_minutes: null
     };
+  }
+
+  // ---------- AI service usage windows (5h / weekly), collected or reported ----------
+  usageServiceFor(p) {
+    return this.profile(p.project_id, p.label).usage_service || DEFAULT_USAGE_SERVICE[p.client] || null;
+  }
+
+  // Newer snapshots replace older ones; an older snapshot never overwrites a newer one.
+  recordUsageWindows(records, defaults = {}) {
+    let saved = 0;
+    for (const raw of records) {
+      const r = normalizeRecord(raw, defaults);
+      if (!r) continue;
+      const cur = this.one('SELECT fetched_at FROM usage_windows WHERE service=? AND window=?', r.service, r.window);
+      if (cur?.fetched_at != null && r.fetched_at != null && r.fetched_at < cur.fetched_at) continue;
+      this.run(`INSERT INTO usage_windows(service,window,used_percent,resets_at,period_minutes,source,fetched_at,updated_at) VALUES(?,?,?,?,?,?,?,?)
+        ON CONFLICT(service,window) DO UPDATE SET used_percent=excluded.used_percent, resets_at=excluded.resets_at, period_minutes=excluded.period_minutes,
+        source=excluded.source, fetched_at=excluded.fetched_at, updated_at=excluded.updated_at`,
+        r.service, r.window, r.used_percent, r.resets_at, r.period_minutes, r.source, r.fetched_at, this.now());
+      saved++;
+    }
+    return saved;
+  }
+
+  async syncUsage(options = {}) {
+    const { records, errors } = await collectUsage({ now: new Date(this.now()), ...options });
+    const saved = this.tx(() => this.recordUsageWindows(records));
+    this.lastUsageSync = { at: this.now(), saved, errors };
+    if (saved) this.emit('changed');
+    return { ok: true, saved, errors };
+  }
+
+  // Human entry for services that cannot be collected (GUI / CLI).
+  setUsageManual(input = {}) {
+    const r = normalizeRecord({ ...input, source: 'manual', fetchedAt: this.now() });
+    if (!r) throw new Refusal('bad_input', this.tUi('human.invalid_usage_entry'));
+    this.tx(() => this.recordUsageWindows([r]));
+    this.event('usage_manual', { data: { service: r.service, window: r.window } });
+    this.kick();
+    return { ok: true };
+  }
+
+  removeUsage(service, window = null) {
+    if (window) this.run('DELETE FROM usage_windows WHERE service=? AND window=?', String(service), String(window));
+    else this.run('DELETE FROM usage_windows WHERE service=?', String(service));
+    this.kick();
+    return { ok: true };
+  }
+
+  // Rows with the next reset rolled forward and remaining minutes; stale = fetched over 30 min ago or unknown.
+  usageWindows(service = null) {
+    const now = this.now();
+    const rows = service ? this.all('SELECT * FROM usage_windows WHERE service=?', service) : this.all('SELECT * FROM usage_windows');
+    return rows.map(r => {
+      const next = nextResetMs(r.resets_at, r.period_minutes, now);
+      const rolled = next !== r.resets_at;
+      return {
+        service: r.service, window: r.window,
+        // After a reset the recorded percentage no longer applies.
+        used_percent: rolled ? null : r.used_percent,
+        resets_at: new Date(next).toISOString(), remaining_minutes: Math.max(0, Math.ceil((next - now) / 60_000)),
+        period_minutes: r.period_minutes, source: r.source,
+        fetched_at: r.fetched_at == null ? null : new Date(r.fetched_at).toISOString(),
+        stale: r.fetched_at == null || now - r.fetched_at > 30 * 60_000 || rolled
+      };
+    }).sort((a, b) => a.service.localeCompare(b.service) || a.remaining_minutes - b.remaining_minutes);
   }
 
   recordClaimUsage(t, p) {
