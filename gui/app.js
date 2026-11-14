@@ -501,7 +501,7 @@ function usageWindowsPanel() {
   return h('div', { class: 'card' }, h('h2', {}, gt('usage.title')),
     h('button', { onclick: async () => { const result = await act(() => api('syncUsage')); if (result) toast(gt('usage.synced', result.saved, result.errors.length)); } }, gt('usage.sync')),
     rows.length ? h('div', { class: 'list' }, rows.map(r => h('div', { class: r.stale ? 'small muted' : 'small' },
-      `${r.service} / ${r.window} — ${r.used_percent == null ? '—' : r.used_percent + '%'} — ${gt('usage.remaining', r.remaining_minutes)} — ${fmt(r.resets_at)} — ${r.source} — ${r.fetched_at ? fmt(r.fetched_at) : '—'}${r.stale ? ' (' + gt('usage.stale') + ')' : ''}`,
+      `${r.service} / ${r.window} — ${r.used_percent == null ? '—' : Math.round(r.used_percent) + '%'} — ${gt('usage.remaining', r.remaining_minutes)} — ${fmt(r.resets_at)} — ${r.source} — ${r.fetched_at ? fmt(r.fetched_at) : '—'}${r.stale ? ' (' + gt('usage.stale') + ')' : ''}`,
       labels(r.service) ? h('div', {}, labels(r.service)) : null))) : h('p', { class: 'muted' }, gt('usage.empty')),
     h('h3', {}, gt('usage.manual')), h('div', { class: 'grid2' }, field(gt('usage.service'), service), field(gt('usage.window'), windowName), field(gt('usage.reset'), reset), field(gt('usage.percent'), percent), field(gt('usage.period'), period)),
     h('button', { onclick: () => act(() => api('setUsageManual', { service: service.value, window: windowName.value, resets_at: reset.value ? new Date(reset.value).toISOString() : '', used_percent: percent.value === '' ? null : Number(percent.value), period_minutes: period.value === '' ? null : Number(period.value) }), gt('usage.saved')) }, gt('usage.save')));

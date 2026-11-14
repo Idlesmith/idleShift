@@ -58,7 +58,7 @@ export const TOOLS = [
   },
   {
     name: 'usage',
-    description: 'Read usage windows for participants in your project, with your own entry first.',
+    description: 'Read AI service usage for participants in your project (your own entry first): each window includes used_percent (null if unknown or reset), resets_at, remaining_minutes, source, fetched_at and stale. Call it before taking heavy work.',
     inputSchema: { type: 'object', properties: { participant: s('Your participant id') }, required: ['participant'] }
   },
   {
