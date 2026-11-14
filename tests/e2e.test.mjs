@@ -78,7 +78,7 @@ test('service + relay + GUI API end to end', async t => {
     const init = await a.init(); await b.init();
     assert.equal(init.result.serverInfo.name, 'idleshift');
     assert.equal(init.result.protocolVersion, '2025-06-18');
-    assert.deepEqual((await a.rpc('tools/list', {})).result.tools.map(x => x.name), ['join', 'next', 'claim', 'get', 'report', 'plan', 'status']);
+    assert.deepEqual((await a.rpc('tools/list', {})).result.tools.map(x => x.name), ['join', 'next', 'claim', 'get', 'report', 'plan', 'usage', 'status']);
     const before = await a.call('join', { root });
     assert.equal(before.registered, false);
     assert.equal((await gui('state', {})).json.result.root_requests.length, 1);

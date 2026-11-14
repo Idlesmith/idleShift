@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 const V1 = `
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);
@@ -144,7 +144,18 @@ const V8 = db => {
   }
 };
 
-const MIGRATIONS = [null, V1, V2, V3, V4, V5, V6, V7, V8];
+// v9: AI service usage windows (5h / weekly) and which service a participant label consumes.
+const V9 = db => {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS usage_windows(
+  service TEXT NOT NULL, window TEXT NOT NULL, used_percent REAL, resets_at INTEGER NOT NULL,
+  period_minutes INTEGER, source TEXT NOT NULL, fetched_at INTEGER, updated_at INTEGER NOT NULL,
+  PRIMARY KEY(service, window));
+`);
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='participant_profiles'").get()) db.exec('ALTER TABLE participant_profiles ADD COLUMN usage_service TEXT;');
+};
+
+const MIGRATIONS = [null, V1, V2, V3, V4, V5, V6, V7, V8, V9];
 
 export function openDb(file, { backupDir } = {}) {
   const existed = file !== ':memory:' && fs.existsSync(file);
@@ -200,6 +211,7 @@ export function inspectBackup(file) {
     const required = [...REQUIRED_TABLES_V1];
     if (v >= 4) required.push('participant_profiles', 'usage_log');
     if (v >= 6) required.push('worktrees');
+    if (v >= 9) required.push('usage_windows');
     const missing = required.filter(t => !tables.has(t));
     if (missing.length) throw new Error(`バックアップに必要なテーブルが不足しています: ${missing.join(', ')}`);
     const count = t => db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c;

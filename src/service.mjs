@@ -228,6 +228,8 @@ export async function runService({ home = null, guiPort = 0, quiet = false, adap
     createGoal: p => ctx.core.createGoal(p.project, p.goal),
     updateGoal: p => ctx.core.updateGoal(p.goal, p.patch),
     setGoalStatus: p => ctx.core.setGoalStatus(p.goal, p.status),
+    approveProposedGoal: p => ctx.core.approveProposedGoal(p.goal),
+    rejectProposedGoal: p => ctx.core.rejectProposedGoal(p.goal),
     setProjectStop: p => ctx.core.setProjectStop(p.project, !!p.stopped),
     addHumanTask: p => ctx.core.addHumanTask(p.goal, p.task),
     addHumanNote: p => ctx.core.addHumanNote(p.goal, p.text),
@@ -237,6 +239,11 @@ export async function runService({ home = null, guiPort = 0, quiet = false, adap
     setClientJoinBlocked: p => ctx.core.setClientJoinBlocked(p.project, p.client, p.blocked !== false),
     revokeParticipant: p => ctx.core.revokeParticipant(p.participant, p.revoked !== false),
     setProfile: p => ctx.core.setProfile(p.project, p.label, p.profile),
+    syncUsage: () => ctx.core.syncUsage(),
+    usageWindows: p => ctx.core.usageWindows(p?.service || null),
+    setUsageManual: p => ctx.core.setUsageManual(p),
+    removeUsage: p => ctx.core.removeUsage(p.service, p.window || null),
+    setUsagePolicy: p => ctx.core.setUsagePolicy(p),
     setTierPolicy: p => ctx.core.setTierPolicy(p.project, p.policy),
     setLanguages: p => ctx.core.setLanguages(p),
     setQuota: p => ctx.core.setQuota(p.client, p.quota, 'human'),
@@ -359,6 +366,10 @@ export async function runService({ home = null, guiPort = 0, quiet = false, adap
   const timer = setInterval(() => {
     try { ctx.core.tick(); if (adaptersEnabled) adapters.tick(); } catch (error) { log(`tick error ${error?.stack || error}`); }
   }, 2000);
+  // Collect AI usage windows now and every 5 minutes; a failing source is only logged.
+  const syncUsage = () => ctx.core.syncUsage().then(r => { for (const e of r.errors) log(`usage ${e.collector}: ${e.error}`); }).catch(error => log(`usage sync error ${error?.stack || error}`));
+  if (process.env.IDLESHIFT_USAGE_SYNC !== '0') syncUsage();
+  const usageTimer = setInterval(() => { if (process.env.IDLESHIFT_USAGE_SYNC !== '0') syncUsage(); }, 5 * 60_000);
   let lastAutoBackup = 0;
   const backupTimer = setInterval(() => {
     // One rolling daily copy; manual and pre-update copies are kept separately.
@@ -368,7 +379,7 @@ export async function runService({ home = null, guiPort = 0, quiet = false, adap
   let stopping = false;
   async function stop() {
     if (stopping) return; stopping = true;
-    clearInterval(timer); clearInterval(backupTimer);
+    clearInterval(timer); clearInterval(backupTimer); clearInterval(usageTimer);
     adapters.stopAll();
     for (const pid of [...ctx.core.waiters.keys()]) ctx.core.resolveWaiter(pid, { kind: 'none', again: false, reason: ctx.core.tUi('service.shutdown_reason') }, 'shutdown');
     try { ctx.core.meta('last_tick', Date.now()); } catch { /* closing anyway */ }

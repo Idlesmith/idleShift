@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeCore, seed, joinAs } from './helpers.mjs';
+import { DEFAULT_DELEGATION, DEFAULT_BUDGETS } from '../src/core.mjs';
+import { makeCore, seed, joinAs, tmpDir } from './helpers.mjs';
 
 test('add_goal: an AI creates a goal that inherits and can only narrow the template', () => {
   const { core } = makeCore(); const { root, goal } = seed(core);
@@ -24,5 +25,26 @@ test('add_goal: refused from a finished template, cannot mix with other ops, ref
   assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: 'b' }, { op: 'add_evidence', text: 't' }] }));
   assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: '' }] }), e => e.code === 'bad_input');
   core.run("UPDATE goals SET status='done' WHERE id=?", goal);
-  assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: 'a' }] }), e => e.code === 'goal_not_active');
+  const r = core.plan({ participant: p, goal, ops: [{ op: 'add_goal', title: 'a' }] });
+  assert.equal(core.goal(r.created[0].goal).status, 'active', 'done template can still seed a goal');
+  assert.throws(() => core.plan({ participant: p, goal, ops: [{ op: 'add_evidence', text: 't' }] }), e => e.code === 'goal_not_active');
+});
+
+test('add_goal without a template uses safe defaults even for a worker', () => {
+  const { core } = makeCore();
+  const root = tmpDir('no-goals');
+  const project = core.createProject({ name: 'empty' }).id; core.addRoot(project, root);
+  const participant = joinAs(core, root, 'worker', 'worker-conn');
+  const result = core.plan({ participant, ops: [{ op: 'add_goal', title: 'first', delegation: { write_files: 'allow', run_code: 'allow', install_deps: 'allow' }, budgets: { max_parallel: 100 } }] });
+  const goal = core.goal(result.created[0].goal);
+  assert.equal(goal.author_kind, 'ai');
+  assert.deepEqual(core.delegation(goal), DEFAULT_DELEGATION);
+  assert.ok(core.budgets(goal).max_parallel <= DEFAULT_BUDGETS.max_parallel);
+  assert.throws(() => core.plan({ participant, ops: [{ op: 'add_evidence', text: 'x' }] }));
+  core.setGoalStatus(goal.id, 'stopped'); assert.equal(core.goal(goal.id).status, 'stopped');
+  core.setProjectStop(project, true);
+  assert.throws(() => core.plan({ participant, ops: [{ op: 'add_goal', title: 'blocked' }] }), e => e.code === 'stopped');
+  core.setProjectStop(project, false);
+  core.run('UPDATE projects SET archived_at=? WHERE id=?', Date.now(), project);
+  assert.throws(() => core.plan({ participant, ops: [{ op: 'add_goal', title: 'blocked' }] }), e => e.code === 'project_archived');
 });

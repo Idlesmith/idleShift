@@ -66,3 +66,18 @@ th { color: var(--muted); font-weight: 600; border-top: 0; }
 .md table { margin: 6px 0; } .md hr { border: 0; border-top: 1px solid var(--line); }
 .row select,.row input[type=number] { width: auto; }
 .card.archived { opacity: .8; border-style: dashed; }
+
+/* usage rings on the home screen */
+.usvc-list { display: flex; flex-direction: column; gap: 12px; }
+.usvc { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.usvc-name { min-width: 96px; font-weight: 600; padding-top: 22px; }
+.uring-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.uring { width: 92px; text-align: center; }
+.uring-dial { --c: var(--ok); width: 64px; height: 64px; margin: 0 auto 4px; border-radius: 50%;
+  background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--chip) 0); display: grid; place-items: center; }
+.uring-dial span { width: 48px; height: 48px; border-radius: 50%; background: var(--panel); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.uring.warn .uring-dial { --c: var(--warn); } .uring.bad .uring-dial { --c: var(--bad); }
+.uring.unknown .uring-dial { background: repeating-conic-gradient(var(--line) 0 6%, transparent 6% 10%); }
+.uring.stale { opacity: .5; }
+.uring-name { font-size: 12px; overflow-wrap: anywhere; }
+.uring-left { font-size: 11px; }

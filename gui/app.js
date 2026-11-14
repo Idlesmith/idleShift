@@ -99,7 +99,7 @@ async function copy(text) { try { await navigator.clipboard.writeText(text); toa
 const fmt = ts => (ts ? new Date(ts).toLocaleString(uiLang() === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const ago = ts => { if (!ts) return ''; const s = Math.max(0, Math.round((Date.now() - ts) / 1000)); return s < 90 ? gt('time.sec_ago', s) : s < 5400 ? gt('time.min_ago', Math.round(s / 60)) : s < 172800 ? gt('time.hr_ago', Math.round(s / 3600)) : gt('time.day_ago', Math.round(s / 86400)); };
 
-const GOAL_STATUS_CLS = { active: 'ok', paused: 'warn', waiting_decision: 'warn', done_candidate: 'warn', done: 'ok', stopped: 'bad' };
+const GOAL_STATUS_CLS = { active: 'ok', paused: 'warn', waiting_decision: 'warn', done_candidate: 'warn', done: 'ok', stopped: 'bad', proposed: 'warn' };
 const P_STATE_CLS = { waiting: 'ok', working: 'ok', active: 'ok', needs_resume: 'warn', no_response: 'bad', idle: '', revoked: 'bad' };
 const DELEG_KEYS = ['research', 'write_files', 'run_code', 'install_deps', 'prototype'];
 const KNOWN_ANSWERS = new Set(['extend', 'stop', 'continue', 'confirm', 'reject', 'retry', 'cancel', 'cancel_task', 'resume', 'allow_more']);
@@ -186,6 +186,18 @@ function deleteProjectDialog(p) {
   textPrompt(gt('project.delete_title', p.name), gt('project.delete_label'), v => act(() => api('deleteProject', { project: p.id, confirm: v }), gt('project.deleted')),
     { area: false, okLabel: gt('project.delete_btn'), hint: gt('project.delete_hint') });
 }
+function humanWaitsText(p) {
+  const waits = p.human_waits || [];
+  if (!waits.length) return '';
+  const items = waits.map(w => {
+    if (w.kind === 'merge') return gt('home.wait_merge', w.task);
+    if (w.kind === 'decision') return gt('home.wait_decision', w.decision);
+    if (w.kind === 'done_candidate') return gt('home.wait_done_candidate', w.goal);
+    return w.kind;
+  });
+  return gt('home.human_waits', items.join(S.settings?.effective_ui_language === 'ja' ? '、' : ', '));
+}
+
 function archiveBlockers(p) {
   const b = p.archive_blockers || {}; const why = [];
   if (b.held_tasks) why.push(gt('project.blocker_held', b.held_tasks));
@@ -212,9 +224,38 @@ function archivedCard(p) {
     h('div', { class: 'list' }, p.goals.length ? p.goals.map(g => h('div', {}, h('button', { class: 'link', onclick: () => { openGoal = g.id; goalData = null; render(); loadGoal(); } }, `${g.id}  ${g.title}`), ' ', badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]))) : h('div', { class: 'muted' }, gt('project.no_goals'))));
 }
 
+// ---- usage rings (home) ----
+const fmtLeft = min => min >= 1440 ? `${Math.floor(min / 1440)}${gt('usage.unit_d')} ${Math.floor((min % 1440) / 60)}${gt('usage.unit_h')}` : min >= 60 ? `${Math.floor(min / 60)}${gt('usage.unit_h')} ${min % 60}${gt('usage.unit_m')}` : `${min}${gt('usage.unit_m')}`;
+function usageRing(w) {
+  const known = w.used_percent != null;
+  const pct = known ? Math.max(0, Math.min(100, Math.round(w.used_percent))) : 0;
+  const level = !known ? 'unknown' : pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : 'ok';
+  // Inline style attributes are blocked by the page CSP, so set the custom property through CSSOM.
+  const dial = h('div', { class: 'uring-dial' }, h('span', {}, known ? `${pct}%` : '?'));
+  dial.style.setProperty('--p', String(pct));
+  return h('div', { class: `uring ${level}${w.stale ? ' stale' : ''}`, title: `${w.service} / ${w.window}
+${gt('usage.reset')}: ${fmt(w.resets_at)}
+${w.source}${w.fetched_at ? ' · ' + fmt(w.fetched_at) : ''}${w.stale ? ' · ' + gt('usage.stale') : ''}` },
+    dial,
+    h('div', { class: 'uring-name' }, w.window),
+    h('div', { class: 'uring-left small muted' }, gt('usage.resets_in', fmtLeft(w.remaining_minutes))));
+}
+function usageHomeCard() {
+  const rows = S.usage_windows || [];
+  const services = [...new Set(rows.map(r => r.service))];
+  return h('div', { class: 'card' },
+    h('div', { class: 'row spread' }, h('h2', {}, gt('usage.title')),
+      h('button', { onclick: async () => { const r = await act(() => api('syncUsage')); if (r) toast(gt('usage.synced', r.saved, r.errors.length)); } }, gt('usage.sync'))),
+    rows.length ? h('div', { class: 'usvc-list' }, services.map(svc => h('div', { class: 'usvc' },
+      h('div', { class: 'usvc-name' }, svc),
+      h('div', { class: 'uring-row' }, rows.filter(r => r.service === svc).sort((a, b) => a.remaining_minutes - b.remaining_minutes).map(usageRing)))))
+      : h('p', { class: 'muted' }, gt('usage.empty')));
+}
+
 // ---- home ----
 function viewHome() {
   const out = [];
+  if ((S.usage_windows || []).length || S.projects.length) out.push(usageHomeCard());
   const nArch = S.projects.filter(p => p.archived).length;
   if (nArch) out.push(h('label', { class: 'check small muted' }, h('input', { type: 'checkbox', checked: showArchived, onchange: e => { showArchived = e.target.checked; render(); } }), gt('home.show_archived', nArch)));
   if (!S.projects.length) out.push(h('div', { class: 'card' }, h('h2', {}, gt('home.welcome_title')), h('p', {}, gt('home.welcome_body'))));
@@ -232,10 +273,11 @@ function viewHome() {
       h('div', { class: 'small muted' }, gt('home.folders_label'), p.roots.length ? p.roots.map(r => r.path_display).join(' / ') : gt('home.unregistered'), ' ', h('button', { class: 'link', onclick: () => addFolder(p.id) }, gt('home.pick_folder')), '  ', h('button', { class: 'link', onclick: () => textPrompt(gt('folder.register_title'), gt('folder.path_example'), v => act(() => api('addRoot', { project: p.id, path: v }), gt('folder.registered')), { area: false, okLabel: gt('common.register') }) }, gt('home.type_folder'))),
       h('div', { class: 'row small' }, gt('home.participants_label'), p.participants.filter(x => !x.revoked).length ? p.participants.filter(x => !x.revoked).map(x => badge(`${x.label}: ${gt('p_state.' + x.state)}`, P_STATE_CLS[x.state])) : h('span', { class: 'muted' }, gt('home.no_participants'))),
       p.participants.some(x => x.state === 'needs_resume') ? h('div', { class: 'hint small' }, gt('home.needs_resume_hint')) : null,
+      p.human_waits?.length ? h('div', { class: 'hint small' }, humanWaitsText(p)) : null,
       h('div', { class: 'list' }, p.goals.length ? p.goals.map(g => h('div', {},
         h('div', { class: 'row spread' },
           h('button', { class: 'link', onclick: () => { openGoal = g.id; goalData = null; render(); loadGoal(); } }, h('strong', {}, `${g.id}  ${g.title}`)),
-          badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status])),
+          badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]), g.author_kind === 'ai' ? badge(gt('task.author_ai', g.author), 'warn') : null),
         h('div', { class: 'small muted' }, gt('home.goal_stats', g.assignments_used, g.budgets.max_assignments, g.counts.accepted || 0, g.counts.claimed || 0, g.counts.open || 0, g.counts.needs_check || 0, g.summary ? g.summary.slice(0, 90) : '')))) : h('div', { class: 'muted' }, gt('home.no_goals_yet')))));
   }
   out.push(h('button', { onclick: () => textPrompt(gt('home.create_project_title'), gt('home.create_project_label'), v => act(() => api('createProject', { name: v }), gt('home.created')), { area: false, okLabel: gt('common.create') }) }, gt('home.create_project_btn')));
@@ -267,7 +309,8 @@ async function showTask(id) {
         h('div', {}, gt('task.base_commit')), h('div', {}, d.worktree.base_commit?.slice(0, 10) || '—'),
         h('div', {}, gt('task.commits')), h('div', {}, gt('task.commits_count', d.worktree.commit_count)),
         d.worktree.uncommitted_count ? [h('div', {}, gt('task.uncommitted')), h('div', { class: 'bad' }, gt('task.uncommitted_count', d.worktree.uncommitted_count))] : null,
-        d.worktree.diff_stat ? [h('div', {}, gt('task.diff_stat')), h('pre', {}, d.worktree.diff_stat)] : null),
+        d.worktree.diff_stat ? [h('div', {}, gt('task.diff_stat')), h('pre', {}, d.worktree.diff_stat)] : null,
+        d.worktree.last_error ? [h('div', {}, gt('task.wt_error')), h('div', { class: 'bad' }, d.worktree.last_error)] : null),
       d.worktree.state === 'active' ? h('div', { class: 'row' },
         h('button', { class: 'primary', onclick: () => {
           dialog(gt('task.merge_title'),
@@ -275,7 +318,9 @@ async function showTask(id) {
               h('p', {}, gt('task.merge_confirm', d.worktree.branch)),
               d.worktree.diff_stat ? h('pre', {}, d.worktree.diff_stat) : null),
             [h('button', { class: 'primary', onclick: async () => {
-              if (await act(() => api('mergeTaskWorktree', { task: t.id }), gt('task.merged_toast'))) {
+              const r = await act(() => api('mergeTaskWorktree', { task: t.id }), gt('task.merged_toast'));
+              if (r?.warning) toast(r.warning);
+              if (r) {
                 closeDialog();
                 if (openGoal) loadGoal();
               }
@@ -286,7 +331,9 @@ async function showTask(id) {
             h('div', {},
               h('p', {}, gt('task.discard_confirm', d.worktree.branch))),
             [h('button', { class: 'stop', onclick: async () => {
-              if (await act(() => api('discardTaskWorktree', { task: t.id }), gt('task.discarded_toast'))) {
+              const r = await act(() => api('discardTaskWorktree', { task: t.id }), gt('task.discarded_toast'));
+              if (r?.warning) toast(r.warning);
+              if (r) {
                 closeDialog();
                 if (openGoal) loadGoal();
               }
@@ -321,8 +368,9 @@ function viewGoal() {
   return [
     h('div', { class: 'row' }, h('button', { onclick: () => { openGoal = null; render(); } }, gt('goal_view.back'))),
     h('div', { class: 'card' },
-      h('div', { class: 'row spread' }, h('h2', {}, `${g.id}  ${g.title}  `, badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status])),
+      h('div', { class: 'row spread' }, h('h2', {}, `${g.id}  ${g.title}  `, badge(gt('goal_status.' + g.status), GOAL_STATUS_CLS[g.status]), g.author_kind === 'ai' ? badge(gt('task.author_ai', g.author), 'warn') : null),
         h('div', { class: 'row' },
+          g.status === 'proposed' ? [h('button', { class: 'primary', onclick: () => act(() => api('approveProposedGoal', { goal: g.id }), gt('goal_view.approved_toast')) }, gt('goal_view.approve_btn')), h('button', { onclick: async () => { if (await act(() => api('rejectProposedGoal', { goal: g.id }), gt('goal_view.rejected_toast'))) { openGoal = null; goalData = null; render(); } } }, gt('goal_view.reject_btn'))] : null,
           g.status === 'active' ? h('button', { onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'paused' }), gt('goal_view.paused_toast')) }, gt('goal_view.pause_btn')) : null,
           ['paused', 'stopped'].includes(g.status) ? h('button', { class: 'primary', onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'active' }), gt('goal_view.resumed_toast')) }, gt('goal_view.resume_btn')) : null,
           !['stopped', 'done'].includes(g.status) ? h('button', { onclick: () => act(() => api('setGoalStatus', { goal: g.id, status: 'stopped' }), gt('goal_view.stopped_toast')) }, gt('goal_view.stop_btn')) : null,
@@ -424,6 +472,7 @@ function viewConnect() {
         h('td', {}, badge(gt('quota.' + c.quota.state), c.quota.state === 'limit_reported' ? 'bad' : ''), c.quota.blocked_until ? h('div', { class: 'small muted' }, gt('clients.blocked_until', fmt(c.quota.blocked_until))) : null),
         h('td', {}, h('button', { onclick: () => quotaDialog(c.client, c.quota) }, gt('clients.set_quota_btn')))))) : h('div', { class: 'muted' }, gt('clients.none'))));
 
+  out.push(usageWindowsPanel());
   for (const p of activeProjects()) {
     const a = p.adapters || {};
     const boxes = Object.entries(S.adapters.available).map(([k, name]) => {
@@ -458,15 +507,36 @@ const USAGE_LIMIT_KEYS = ['limit_5h_claims', 'limit_5h_minutes', 'limit_7d_claim
 function profileDialog(project, participant) {
   const tier = h('select', { 'aria-label': gt('tier.dialog_aria') }, h('option', { value: '' }, gt('tier.unset')), TIER_KEYS.map(key => h('option', { value: key }, gt('tier.' + key))));
   tier.value = participant.tier || '';
+  const service = h('input', { type: 'text', value: participant.usage_service_override || '', placeholder: participant.usage_service || gt('usage.auto') });
   const limits = Object.fromEntries(USAGE_LIMIT_KEYS.map(key => [key, h('input', { type: 'number', min: 1, max: 10000, step: 1, placeholder: gt('tier.no_limit'), 'aria-label': gt('tier.' + key), value: participant.usage?.limits[key] ?? '' })]));
   dialog(gt('tier.dialog_title', participant.label), h('div', {},
     h('p', { class: 'small muted' }, gt('tier.dialog_hint1')),
-    field(gt('tier.field'), tier), h('div', { class: 'grid2' }, USAGE_LIMIT_KEYS.map(key => h('div', {}, field(gt('tier.' + key), limits[key])))),
+    field(gt('tier.field'), tier), field(gt('usage.service_mapping'), service), h('div', { class: 'grid2' }, USAGE_LIMIT_KEYS.map(key => h('div', {}, field(gt('tier.' + key), limits[key])))),
     h('p', { class: 'small muted' }, gt('tier.dialog_hint2'))),
     [h('button', { class: 'primary', onclick: async () => {
       const values = Object.fromEntries(Object.entries(limits).map(([key, input]) => [key, input.value === '' ? null : Number(input.value)]));
-      if (await act(() => api('setProfile', { project: project.id, label: participant.label, profile: { tier: tier.value || null, ...values } }), gt('tier.saved'))) closeDialog();
+      if (await act(() => api('setProfile', { project: project.id, label: participant.label, profile: { tier: tier.value || null, usage_service: service.value.trim() || null, ...values } }), gt('tier.saved'))) closeDialog();
     } }, gt('tier.save_btn'))]);
+}
+
+function usageWindowsPanel() {
+  const service = h('input', { type: 'text', placeholder: 'codex', 'aria-label': gt('usage.service') });
+  const windowName = h('input', { type: 'text', placeholder: '5h', 'aria-label': gt('usage.window') });
+  const reset = h('input', { type: 'datetime-local', 'aria-label': gt('usage.reset') });
+  const percent = h('input', { type: 'number', min: 0, max: 100, step: 'any', 'aria-label': gt('usage.percent') });
+  const period = h('input', { type: 'number', min: 1, step: 1, 'aria-label': gt('usage.period') });
+  const deferPercent = h('input', { type: 'number', min: 1, max: 100, step: 'any', value: S.usage_policy?.defer_writes_percent ?? '', placeholder: gt('usage.defer_hint'), 'aria-label': gt('usage.defer_writes') });
+  const rows = [...(S.usage_windows || [])].sort((a, b) => a.remaining_minutes - b.remaining_minutes);
+  const labels = serviceName => S.projects.flatMap(p => p.participants.filter(x => x.usage_service === serviceName).map(x => `${p.name}: ${x.label}`)).join(', ');
+  return h('div', { class: 'card' }, h('h2', {}, gt('usage.title')),
+    h('button', { onclick: async () => { const result = await act(() => api('syncUsage')); if (result) toast(gt('usage.synced', result.saved, result.errors.length)); } }, gt('usage.sync')),
+    rows.length ? h('div', { class: 'list' }, rows.map(r => h('div', { class: r.stale ? 'small muted' : 'small' },
+      `${r.service} / ${r.window} — ${r.used_percent == null ? '—' : Math.round(r.used_percent) + '%'} — ${gt('usage.remaining', r.remaining_minutes)} — ${fmt(r.resets_at)} — ${r.source} — ${r.fetched_at ? fmt(r.fetched_at) : '—'}${r.stale ? ' (' + gt('usage.stale') + ')' : ''}`,
+      labels(r.service) ? h('div', {}, labels(r.service)) : null))) : h('p', { class: 'muted' }, gt('usage.empty')),
+    h('div', { class: 'grid2' }, field(gt('usage.defer_writes'), deferPercent)),
+    h('button', { onclick: () => act(() => api('setUsagePolicy', { defer_writes_percent: deferPercent.value === '' ? null : Number(deferPercent.value) }), gt('usage.policy_saved')) }, gt('usage.save')),
+    h('h3', {}, gt('usage.manual')), h('div', { class: 'grid2' }, field(gt('usage.service'), service), field(gt('usage.window'), windowName), field(gt('usage.reset'), reset), field(gt('usage.percent'), percent), field(gt('usage.period'), period)),
+    h('button', { onclick: () => act(() => api('setUsageManual', { service: service.value, window: windowName.value, resets_at: reset.value ? new Date(reset.value).toISOString() : '', used_percent: percent.value === '' ? null : Number(percent.value), period_minutes: period.value === '' ? null : Number(period.value) }), gt('usage.saved')) }, gt('usage.save')));
 }
 
 function usageSummary(participant) {
