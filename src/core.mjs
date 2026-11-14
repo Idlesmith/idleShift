@@ -111,6 +111,10 @@ export class Core extends EventEmitter {
     return `${prefix}-${this.one('SELECT n FROM seq WHERE name=?', prefix).n}`;
   }
 
+  setMeta(key, value) {
+    if (value == null) this.run('DELETE FROM meta WHERE key=?', key); else this.meta(key, value);
+  }
+
   meta(key, value) {
     if (value === undefined) return this.one('SELECT value FROM meta WHERE key=?', key)?.value ?? null;
     this.run('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, String(value));
@@ -131,7 +135,9 @@ export class Core extends EventEmitter {
       needs_check: '応答のない書込みタスクがあります（確認が必要）',
       resume: '再開が必要なアプリがあります',
       done: '完了候補の確認待ちです',
-      human_wait: '人の操作待ちがあります'
+      human_wait: '人の操作待ちがあります',
+      proposal: '次のゴール案の承認待ちです',
+      idle_disband: '仕事が無くなったため待機中のAIを解散しました'
     }[kind] || kind;
     if (kind === 'human_wait' && Array.isArray(detail) && detail.length) {
       text = t(lang, 'next.none_human_waits', this.formatHumanWaits(detail, lang));
@@ -146,7 +152,7 @@ export class Core extends EventEmitter {
     this.emit('changed');
   }
 
-  settle() { this.tx(() => { this.ensureFacilitators(); this.checkHumanWaits(); }); this.deliver(); }
+  settle() { this.tx(() => { this.ensureFacilitators(); this.checkHumanWaits(); this.checkIdle(); }); this.deliver(); }
 
   // ---------- settings ----------
   getLanguages() {
@@ -293,14 +299,14 @@ export class Core extends EventEmitter {
     for (const k of DELEGATION_KEYS) if (input.delegation?.[k] === 'allow' || input.delegation?.[k] === 'deny') delegation[k] = input.delegation[k];
     const budgets = this.cleanBudgets(input.budgets, DEFAULT_BUDGETS);
     const gitIsolation = input.git_isolation === 'off' ? 'off' : 'auto';
-    const authorKind = input.author_kind === 'ai' ? 'ai' : 'human';
+    const authorKind = input.author_kind === 'ai' ? 'ai' : input.author_kind === 'system' ? 'system' : 'human';
     const author = input.author ? String(input.author) : null;
     return this.tx(() => {
       const id = this.nextId('G');
       const now = this.now();
       this.run(`INSERT INTO goals(id,project_id,title,outcome,done_evidence,priorities,notes,delegation,budgets,git_isolation,author_kind,author,status,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, projectId, title, clip(input.outcome || '', 4000), clip(input.done_evidence || '', 4000),
-        clip(input.priorities || '', 1000), clip(input.notes || '', 4000), JSON.stringify(delegation), JSON.stringify(budgets), gitIsolation, authorKind, author, input.start === false ? 'paused' : 'active', now, now);
+        clip(input.priorities || '', 1000), clip(input.notes || '', 4000), JSON.stringify(delegation), JSON.stringify(budgets), gitIsolation, authorKind, author, input.proposed ? 'proposed' : input.start === false ? 'paused' : 'active', now, now);
       this.event('goal_created', { project: projectId, goal: id, data: { title } });
       this.kick();
       return { id };
@@ -797,7 +803,7 @@ export class Core extends EventEmitter {
     for (const g of this.all("SELECT g.* FROM goals g JOIN projects p ON p.id=g.project_id WHERE g.status='active' AND p.stopped=0 AND p.archived_at IS NULL")) {
       const live = this.one(`SELECT COUNT(*) c FROM tasks WHERE goal_id=? AND state IN (${LIVE_TASK_STATES.map(() => '?').join(',')})`, g.id, ...LIVE_TASK_STATES).c;
       const pending = this.one("SELECT COUNT(*) c FROM decisions WHERE goal_id=? AND state='pending'", g.id).c;
-      if (live || pending) continue;
+      if (live || pending || this.meta(`idle_goal:${g.id}`)) continue;
       const b = this.budgets(g);
       const marker = this.progressMarker(g.id);
       const streak = g.facilitator_marker === marker ? g.facilitator_streak + 1 : 0;
@@ -981,7 +987,7 @@ export class Core extends EventEmitter {
     const have = TIER_RANK[this.profile(p.project_id, p.label).tier] || 0;
     if (have === need) return 'exact';
     if (!have || have > need) return 'defer';
-    if (t.kind === 'facilitator') return 'defer'; // the goal must not stop because a planner is away
+    if (t.kind === 'facilitator' || t.kind === 'proposal') return 'defer'; // the goal must not stop because a planner is away
     if (t.kind !== 'work' || have !== need - 1 || this.tierPolicy(p.project_id).downgrade_after_minutes == null) return 'no';
     return 'downgrade';
   }
@@ -1154,7 +1160,7 @@ export class Core extends EventEmitter {
     if (overLimit) return null;
     if (this.limited(p.client)) return null;
     const pick = this.pickOffer(p);
-    if (!pick) return null;
+    if (!pick) return this.idleStatus(p.project_id) === 'disband' ? { kind: 'stop', reason: 'idle_disband', message: this.tAi('next.stop_idle'), header: this.header(p, null) } : null;
     const q = this.one('SELECT * FROM quota WHERE client=?', p.client);
     if (q?.state === 'limit_reported' && !q.tried_after_reset) this.run('UPDATE quota SET tried_after_reset=1 WHERE client=?', p.client);
     return this.makeOffer(pick.t, pick.g, p);
@@ -1607,6 +1613,8 @@ export class Core extends EventEmitter {
       },
       how_to_report: t.kind === 'review'
         ? this.tAi('assignment.how_review', t.id, t.gen)
+        : t.kind === 'proposal'
+          ? this.tAi('assignment.how_proposal', t.id, t.gen, g.id)
         : t.kind === 'facilitator'
           ? this.tAi('assignment.how_facilitator', t.id, t.gen, g.id, g.plan_version)
           : this.tAi('assignment.how_work', t.id, t.gen)
@@ -1958,7 +1966,13 @@ export class Core extends EventEmitter {
 
   // A new goal inherits the template goal's delegation and budgets and may only
   // narrow them, so an AI can never widen what a human allowed.
-  addGoalsFrom(g, p, ops) {
+  addGoalsFrom(host, p, ops) {
+    // Goals proposed from the idle-time proposal task wait for a human and inherit from the last finished goal.
+    // Whoever holds a proposal task is always proposing, whatever template goal (or none) the call names.
+    const heldProposal = this.one("SELECT goal_id FROM tasks WHERE assignee=? AND kind='proposal' AND state='claimed'", p.id);
+    const templateId = (heldProposal && this.meta(`idle_goal:${heldProposal.goal_id}`)) || this.meta(`idle_goal:${host.id}`);
+    const proposed = !!templateId;
+    const g = proposed ? (this.one('SELECT * FROM goals WHERE id=?', templateId) || host) : host;
     if (ops.length > 3) throw new Refusal('bad_input', this.tAi('plan.add_goal_limit'));
     const aiGoalLimit = Number(this.meta(`ai_goal_limit:${g.project_id}`) || 10);
     const aiAssignLimit = Number(this.meta(`ai_assign_limit:${g.project_id}`) || 300);
@@ -1994,10 +2008,11 @@ export class Core extends EventEmitter {
     const created = [];
     for (const { op, title, delegation, budgets } of planned) {
       const notes = `[AI ${p.id} が ${g.id || '既定値'} を元に作成]${op.notes ? '\n' + op.notes : ''}`;
-      const { id } = this.createGoal(g.project_id, { title, outcome: op.outcome || '', done_evidence: op.done_evidence || '', priorities: op.priorities || '', notes, delegation, budgets, author_kind: 'ai', author: p.id });
+      const { id } = this.createGoal(g.project_id, { title, outcome: op.outcome || '', done_evidence: op.done_evidence || '', priorities: op.priorities || '', notes, delegation, budgets, author_kind: 'ai', author: p.id, proposed });
       this.event('goal_created_by_ai', { project: g.project_id, goal: id, participant: p.id, data: { template: g.id, title: clip(title, 200) } });
       created.push({ goal: id });
     }
+    if (proposed) this.notify('proposal', p.project_id);
     return { applied: true, created, header: this.header(p, this.myTasks(p.id).length ? 'report' : 'next') };
   }
 
@@ -2175,10 +2190,81 @@ export class Core extends EventEmitter {
       }
       this.ensureFacilitators();
       this.checkHumanWaits();
+      this.checkIdle();
       if (!this.lastCleanupAt || now - this.lastCleanupAt >= 24 * 3600_000) this.cleanupWorktrees();
     });
     this.deliver();
     this.checkStalled(now);
+  }
+
+  // ---------- idle: propose the next goal once, then disband waiting AIs ----------
+  // busy: work or a human-owned goal exists; propose: nothing left and no proposal yet this idle period;
+  // wait: a task is still live; disband: proposal done and still nothing to do.
+  idleStatus(projectId) {
+    const pr = this.project(projectId);
+    if (pr.stopped || pr.archived_at != null) return 'busy';
+    const own = this.all("SELECT id FROM goals WHERE project_id=? AND status IN ('active','waiting_decision','done_candidate','paused')", projectId)
+      .filter(g => !this.meta(`idle_goal:${g.id}`));
+    if (own.length) return 'busy';
+    const live = this.one(`SELECT COUNT(*) c FROM tasks WHERE project_id=? AND state IN (${LIVE_TASK_STATES.map(() => '?').join(',')})`, projectId, ...LIVE_TASK_STATES).c;
+    if (live) return 'wait';
+    if (this.humanWaits(projectId).length) return 'busy';
+    return this.meta(`idle_proposed:${projectId}`) ? 'disband' : 'propose';
+  }
+
+  checkIdle() {
+    for (const pr of this.all('SELECT id FROM projects WHERE stopped=0 AND archived_at IS NULL')) {
+      // A finished proposal task closes its own goal.
+      for (const hg of this.all("SELECT id FROM goals WHERE project_id=? AND status='active'", pr.id)) {
+        if (!this.meta(`idle_goal:${hg.id}`)) continue;
+        const live = this.one(`SELECT COUNT(*) c FROM tasks WHERE goal_id=? AND state IN (${LIVE_TASK_STATES.map(() => '?').join(',')})`, hg.id, ...LIVE_TASK_STATES).c;
+        if (!live) this.run("UPDATE goals SET status='done', closed_at=?, updated_at=? WHERE id=?", this.now(), this.now(), hg.id);
+      }
+      const st = this.idleStatus(pr.id);
+      if (st === 'busy') {
+        // Real work or a human-owned goal ends the idle period.
+        this.setMeta(`idle_proposed:${pr.id}`, null);
+        this.setMeta(`idle_disbanded:${pr.id}`, null);
+      } else if (st === 'propose') {
+        const template = this.one("SELECT * FROM goals WHERE project_id=? AND status='done' ORDER BY COALESCE(closed_at, updated_at) DESC, created_at DESC", pr.id);
+        if (!template) continue;
+        const tb = this.budgets(template);
+        const { id } = this.createGoal(pr.id, { title: this.tAi('idle.goal_title'), outcome: this.tAi('idle.goal_outcome'), done_evidence: this.tAi('idle.goal_evidence'), delegation: this.delegation(template), budgets: { ...tb, max_assignments: Math.min(tb.max_assignments, 3), deadline: null }, author_kind: 'system', git_isolation: 'off' });
+        this.setMeta(`idle_goal:${id}`, template.id);
+        this.setMeta(`idle_proposed:${pr.id}`, '1');
+        this.insertTask(this.goal(id), { kind: 'proposal', role: 'design', mode: 'read_only', author_kind: 'system', tier: this.tierExists(pr.id, 'planner') ? 'planner' : 'any', title: this.tAi('idle.task_title'), body: this.tAi('idle.task_body', id, template.id) });
+        this.event('idle_proposal_requested', { project: pr.id, goal: id, data: { template: template.id } });
+      } else if (st === 'disband') {
+        for (const [pid, w] of [...this.waiters]) if (w.project === pr.id) this.resolveWaiter(pid, { kind: 'stop', reason: 'idle_disband', message: this.tAi('next.stop_idle') }, 'stop');
+        if (!this.meta(`idle_disbanded:${pr.id}`)) {
+          this.setMeta(`idle_disbanded:${pr.id}`, '1');
+          this.event('idle_disbanded', { project: pr.id });
+          this.notify('idle_disband', pr.id);
+        }
+      }
+    }
+  }
+
+  approveProposedGoal(goalId) {
+    const g = this.goal(goalId);
+    if (g.status !== 'proposed') throw new Refusal('bad_state', this.tUi('human.goal_not_proposed'));
+    this.tx(() => {
+      this.run("UPDATE goals SET status='active', facilitator_streak=0, facilitator_marker=-1, updated_at=? WHERE id=?", this.now(), g.id);
+      this.event('goal_proposal_approved', { project: g.project_id, goal: g.id });
+    });
+    this.kick();
+    return { ok: true };
+  }
+
+  rejectProposedGoal(goalId) {
+    const g = this.goal(goalId);
+    if (g.status !== 'proposed') throw new Refusal('bad_state', this.tUi('human.goal_not_proposed'));
+    this.tx(() => {
+      this.run('DELETE FROM goals WHERE id=?', g.id);
+      this.event('goal_proposal_rejected', { project: g.project_id, data: { goal: g.id, title: clip(g.title, 200) } });
+    });
+    this.kick();
+    return { ok: true };
   }
 
   checkHumanWaits() {
