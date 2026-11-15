@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-> 公開前の下書きです。実装済み・条件付き・未実証の区別は [docs/self-study/REPORT.md](docs/self-study/REPORT.md) の2章を正とします。
+> v0.1.0（初期リリース）です。実装済み・条件付き・未実証の区別は [docs/self-study/REPORT.md](docs/self-study/REPORT.md) の2章を正とします。
 
 複数の MCP 対応 AI アプリ（Claude / Codex / Antigravity など）を、PC 内の 1 つの常駐アプリにつなぎ、**目的・タスク・仮説・根拠・許可・予算・停止**をまとめて管理するローカルアプリです。黒板（blackboard）はアプリに内蔵され、利用者がファイルやフォルダー構成を管理する必要はありません。
 

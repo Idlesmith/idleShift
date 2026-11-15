@@ -2,7 +2,7 @@
 
 English | [日本語](README.ja.md)
 
-> **Pre-release draft.** Not published yet. What is implemented, conditional or unproven is tracked in [docs/self-study/REPORT.md](docs/self-study/REPORT.md) (section 2). This README follows it.
+> **v0.1.0 — early release.** What is implemented, conditional or unproven is tracked in [docs/self-study/REPORT.md](docs/self-study/REPORT.md) (section 2). This README follows it.
 
 **Reset the chat. Not the progress.**
 
@@ -12,7 +12,7 @@ IdleShift is a local blackboard that lets the AI apps you already use — Claude
 
 1. **It does not launch your AIs behind your back.** AIs join from the app you already have open and *pull* work with an MCP tool (`next`). No all-permissions flags. An optional CLI launcher exists but is off unless you turn it on.
 2. **Humans hold the keys.** Only a person can widen what an AI is allowed to do, or confirm that a goal is done. An AI's own claims do not change its permissions or budget.
-   *Two known gaps are being fixed before release — see [Security](#security-and-known-limitations).*
+   *Known limitations are listed under [Security](#security-and-known-limitations).*
 3. **It routes around usage limits — using local meters, AI reports, and human caps.** IdleShift collects 5-hour and weekly usage windows locally where available (Codex rollout logs, Claude Code / Antigravity [`quota-clock`](https://github.com/Idlesmith/quota-clock) statusline caches), accepts AI self-reports and manual/CLI entries, and lets you set 5-hour and 7-day caps per AI. At high usage (90%+ by default), `writes`/`implement` tasks defer to healthier peers; at 100% (or a limit report), offers pause until `resets_at`. IdleShift still makes **no** network calls or vendor API queries.
 
 Things other tools also do (so we do not claim them as unique): a shared MCP task board for several AIs, state that survives the chat, using your existing subscriptions. See the [comparison](docs/self-study/03-competitors.md).
@@ -80,7 +80,7 @@ AI apps (Claude Code / Codex / Antigravity)         You
 ## Security and known limitations
 
 - Scope and reporting: [SECURITY.md](SECURITY.md). Threat model: [docs/threat-model.md](docs/threat-model.md). Latest review: [docs/security-review.md](docs/security-review.md).
-- **Open findings before release:** AI-created goals can reach other AIs as if written by a human (high); an AI can re-use a stopped goal's permissions as a template (medium); and four more medium issues. Fixes are in progress.
+- **Security review:** the one high and five medium findings from the latest review (AI-written goal text passed off as human text, template reuse of stopped goals, pipe spoofing, pre-auth memory growth, self-review via re-join, backup restore checks) are fixed and covered by tests. Remaining low-severity items are listed in [docs/security-review.md](docs/security-review.md).
 - IdleShift cannot stop what an AI does inside its own app. Its delegation settings are requests; enforcement depends on each app's permission settings.
 - An attacker running code as the same Windows user can read the service token.
 - **Data folder:** `%USERPROFILE%\.idleshift`. Older versions used `%LOCALAPPDATA%\IdleShift`, which the Microsoft Store version of Claude Desktop redirects; `gui` moves old data over automatically on first start ([docs/data-home.md](docs/data-home.md)).
