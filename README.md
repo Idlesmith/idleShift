@@ -31,7 +31,7 @@ Things other tools also do (so we do not claim them as unique): a shared MCP tas
 ## Install (from source)
 
 ```
-git clone <repository-url>
+git clone https://github.com/Idlesmith/idleShift.git
 cd idleshift
 node bin/idleshift.mjs gui
 ```
