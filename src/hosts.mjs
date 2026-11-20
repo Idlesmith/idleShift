@@ -22,6 +22,34 @@ export function relayCommand(env = process.env) {
   return entry;
 }
 
+// Parse a host config file. Strips a UTF-8 BOM and names the file and the
+// position in the error, so a person can open the exact place.
+export function parseJsonFile(text, file) {
+  const body = text.replace(/^﻿/, '');
+  try { return JSON.parse(body); } catch (e) {
+    const m = /position (d+)/.exec(e.message);
+    const at = m ? ` @${m[1]}: ${JSON.stringify(body.slice(Math.max(0, +m[1] - 20), +m[1] + 20))}` : '';
+    throw new Error(`${path.basename(file)}: ${e.message}${at}`);
+  }
+}
+
+// Claude Desktop from the Microsoft Store keeps its config under
+// PackagesClaude_*LocalCacheRoamingClaude, not %APPDATA%Claude.
+export function claudeDesktopConfig(env = process.env) {
+  const home = userHome(env);
+  const roaming = env.APPDATA || path.join(home, 'AppData', 'Roaming');
+  const local = env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+  const plain = path.join(roaming, 'Claude', 'claude_desktop_config.json');
+  const dirs = [];
+  try {
+    for (const ent of fs.readdirSync(path.join(local, 'Packages'), { withFileTypes: true })) {
+      if (ent.isDirectory() && /^Claude_/i.test(ent.name)) dirs.push(path.join(local, 'Packages', ent.name, 'LocalCache', 'Roaming', 'Claude'));
+    }
+  } catch { /* no Packages folder */ }
+  const store = dirs.find(d => fs.existsSync(path.join(d, 'claude_desktop_config.json'))) || dirs.find(d => fs.existsSync(d));
+  return store ? path.join(store, 'claude_desktop_config.json') : plain;
+}
+
 const userHome = env => env.USERPROFILE || env.HOME || '';
 
 function findExe(name, candidates) {
@@ -137,13 +165,13 @@ function jsonHost({ key, name, file, note, shape = e => ({ command: e.command, a
     detected: () => fs.existsSync(path.dirname(file)),
     current() {
       if (!fs.existsSync(file)) return null;
-      const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const j = parseJsonFile(fs.readFileSync(file, 'utf8'), file);
       return j.mcpServers?.[SERVER_NAME] ?? null;
     },
     desired: entry => shape(entry),
     apply(entry) {
       const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '{}';
-      const j = text.trim() ? JSON.parse(text) : {};
+      const j = text.trim() ? parseJsonFile(text, file) : {};
       if (typeof j !== 'object' || Array.isArray(j)) throw new Error(t(resolveUiLanguage('auto'), 'hosts.invalid_format'));
       j.mcpServers = j.mcpServers && typeof j.mcpServers === 'object' ? j.mcpServers : {};
       if (entry) j.mcpServers[SERVER_NAME] = shape(entry); else delete j.mcpServers[SERVER_NAME];
@@ -167,7 +195,7 @@ export function hostList(env = process.env, lang = resolveUiLanguage('auto')) {
       current() { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')).mcpServers?.[SERVER_NAME] ?? null; } catch { return null; } },
       desired: e => ({ type: 'stdio', command: e.command, args: e.args, env: e.env || {} })
     },
-    jsonHost({ key: 'claude-desktop', name: t(lang, 'hosts.claude_desktop_name'), file: path.join(env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json'), note: t(lang, 'hosts.claude_desktop_note') }),
+    jsonHost({ key: 'claude-desktop', name: t(lang, 'hosts.claude_desktop_name'), file: claudeDesktopConfig(env), note: t(lang, 'hosts.claude_desktop_note') }),
     {
       key: 'codex', name: t(lang, 'hosts.codex_name'), kind: 'toml', file: codexFile,
       note: t(lang, 'hosts.codex_note'),
