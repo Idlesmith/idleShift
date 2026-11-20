@@ -394,6 +394,7 @@ window.GUI_I18N.ja = {
   'tier.planner': 'planner（計画層）',
   'tier.senior': 'senior（上位ワーカー）',
   'tier.worker': 'worker（量産ワーカー）',
+  'tier.clerk': 'clerk（雑用係）',
   'tier.limit_5h_claims': '5時間の引受け上限（件）',
   'tier.limit_5h_minutes': '5時間の作業時間上限（分）',
   'tier.limit_7d_claims': '7日の引受け上限（件）',

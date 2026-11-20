@@ -36,8 +36,9 @@ const EVIDENCE_KINDS = ['fact', 'source', 'hypothesis', 'rejection', 'unverified
 const REPORT_KINDS = ['progress', 'result', 'decline', 'blocked', 'decision_needed', 'limit'];
 const LIVE_TASK_STATES = ['open', 'offered', 'claimed', 'reported', 'needs_check', 'parked'];
 // Tiers are set by a human only. A participant without one behaves as before.
-const TIER_RANK = Object.freeze({ planner: 3, senior: 2, worker: 1 });
-const TASK_TIERS = ['planner', 'senior', 'worker', 'any'];
+// 0 is reserved for "no tier set"; clerk is the lowest real tier (routine chores).
+const TIER_RANK = Object.freeze({ planner: 4, senior: 3, worker: 2, clerk: 1 });
+const TASK_TIERS = ['planner', 'senior', 'worker', 'clerk', 'any'];
 // A registered folder must be an absolute path to an existing folder. A path
 // whose separators were lost (e.g. "C:AI_HUBconclavity") is drive-relative on
 // Windows and would silently resolve against the current folder.
@@ -611,7 +612,7 @@ export class Core extends EventEmitter {
     if (!name || name !== label) throw new Refusal('bad_input', this.tUi('human.need_participant_label'));
     const fields = ['limit_5h_claims', 'limit_5h_minutes', 'limit_7d_claims', 'limit_7d_minutes'];
     if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k => !['tier', 'usage_service', ...fields].includes(k))) throw new Refusal('bad_input', this.tUi('human.profile_fields_only'));
-    if (Object.hasOwn(patch, 'tier') && ![null, 'planner', 'senior', 'worker'].includes(patch.tier)) throw new Refusal('bad_input', this.tUi('human.invalid_profile_tier'));
+    if (Object.hasOwn(patch, 'tier') && ![null, 'planner', 'senior', 'worker', 'clerk'].includes(patch.tier)) throw new Refusal('bad_input', this.tUi('human.invalid_profile_tier'));
     if (Object.hasOwn(patch, 'usage_service') && patch.usage_service !== null && !/^[\w.:@+-]{1,80}$/.test(String(patch.usage_service))) throw new Refusal('bad_input', this.tUi('human.invalid_usage_service'));
     for (const k of fields) if (Object.hasOwn(patch, k) && patch[k] !== null && (!Number.isInteger(patch[k]) || patch[k] < 1 || patch[k] > 10000)) throw new Refusal('bad_input', this.tUi('human.invalid_profile_limit', k));
     const next = { ...this.profile(projectId, name), ...patch };
@@ -1148,7 +1149,7 @@ export class Core extends EventEmitter {
     if (have === need) return 'exact';
     if (!have || have > need) return 'defer';
     if (t.kind === 'facilitator' || t.kind === 'proposal') return 'defer'; // the goal must not stop because a planner is away
-    if (t.kind !== 'work' || have !== need - 1 || this.tierPolicy(p.project_id).downgrade_after_minutes == null) return 'no';
+    if (t.kind !== 'work' || have === TIER_RANK.clerk || have !== need - 1 || this.tierPolicy(p.project_id).downgrade_after_minutes == null) return 'no';
     return 'downgrade';
   }
 
@@ -2630,7 +2631,7 @@ const FACILITATOR_BODY = [
   '1. get("board") と、必要なら get("evidence:<GOAL>") を読む。',
   '2. 完了の証拠に対して何が足りないか、次に何を確かめれば不確実性が最も減るかを決める。',
   '3. plan で確定する。使える op：',
-  '   - add_task {title, body, role: research|design|implement|review, mode: read_only|writes, tier?: planner|senior|worker|any, branch?, depends_on?, prefer?, exclude?, review?: true}',
+  '   - add_task {title, body, role: research|design|implement|review, mode: read_only|writes, tier?: planner|senior|worker|clerk|any, branch?, depends_on?, prefer?, exclude?, review?: true}',
   '   - add_branch {hypothesis, expected, keep_if, reject_if}（判断の分かれ目は対立仮説を枝にする。同時に進める枝は上限あり）',
   '   - close_branch {branch, verdict: kept|rejected|on_hold|merged, reason}（証拠不足のままの保留も正常な終了）',
   '   - add_evidence {kind: fact|source|hypothesis|rejection|unverified, text, source}',
