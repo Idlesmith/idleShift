@@ -501,7 +501,7 @@ function viewConnect() {
   return out;
 }
 
-const TIER_KEYS = ['planner', 'senior', 'worker'];
+const TIER_KEYS = ['planner', 'senior', 'worker', 'clerk'];
 const USAGE_LIMIT_KEYS = ['limit_5h_claims', 'limit_5h_minutes', 'limit_7d_claims', 'limit_7d_minutes'];
 
 function profileDialog(project, participant) {

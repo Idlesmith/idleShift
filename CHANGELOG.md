@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+- `clerk` tier below `worker` for routine chores. Higher tiers take clerk tasks at once when no clerk exists, and after the grace period otherwise. A clerk never takes worker work by downgrade. No schema change.
+
 ### Changed
 - Renamed the project from Conclavity to IdleShift.
 - Folder registration refuses relative paths, missing folders and files, with a reason.

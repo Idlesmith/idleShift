@@ -394,6 +394,7 @@ window.GUI_I18N.en = {
   'tier.planner': 'planner (Planning)',
   'tier.senior': 'senior (Senior Worker)',
   'tier.worker': 'worker (Worker)',
+  'tier.clerk': 'clerk (Routine chores)',
   'tier.limit_5h_claims': '5h Claim Limit (count)',
   'tier.limit_5h_minutes': '5h Work Time Limit (min)',
   'tier.limit_7d_claims': '7d Claim Limit (count)',

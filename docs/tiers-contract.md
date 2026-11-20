@@ -14,12 +14,15 @@
 
 | 階層 | 順位 | 意味 |
 |---|---|---|
-| `planner` | 3 | 要件定義・進行役 |
-| `senior` | 2 | 上位ワーカー |
-| `worker` | 1 | 量産ワーカー |
+| `planner` | 4 | 要件定義・進行役 |
+| `senior` | 3 | 上位ワーカー |
+| `worker` | 2 | 量産ワーカー |
+| `clerk` | 1 | 雑用係（定型作業：状態更新、要約の整形、テスト実行とログ確認、git の手続き、レポートの下書き） |
 | 未設定（`null`） | — | 従来どおり、どのタスクも受けられる |
 
-タスクの `tier` は `planner / senior / worker / any`（既定 `any`）。
+タスクの `tier` は `planner / senior / worker / clerk / any`（既定 `any`）。
+
+順位 0 は「階層が未設定」を表すために予約している（コードは `順位 > 0` で未設定を見分ける）。`clerk` は実在する階層の最下位で、**降格で下位に降りてくることはない**（`worker` の仕事を `clerk` が降格で受けることは、方針があっても無い）。上位が `clerk` のタスクを取るのは、clerk が1人もいない場合はすぐ、いる場合は猶予後（既存の `defer` と同じ）。
 
 **受けられる条件**：参加者の階層が未設定、またはタスクが `any`、または `順位(参加者) >= 順位(タスク)`。下位が上位のタスクを受けるのは §4 の降格（または進行役タスクの猶予後フォールバック）だけ。
 
@@ -30,7 +33,7 @@
 ```sql
 CREATE TABLE participant_profiles(
   project_id TEXT NOT NULL, label TEXT NOT NULL,
-  tier TEXT,                                   -- planner|senior|worker|NULL
+  tier TEXT,                                   -- planner|senior|worker|clerk|NULL
   limit_5h_claims INTEGER, limit_5h_minutes INTEGER,
   limit_7d_claims INTEGER, limit_7d_minutes INTEGER,   -- NULL は上限なし
   updated_at INTEGER NOT NULL,
